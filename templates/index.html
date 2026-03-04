@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Name & City Form</title>
+
+  <!-- React 18 via CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- Babel for JSX in browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      background: #020b18;
+      overflow-x: hidden;
+    }
+
+    /* Stars */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(1px 1px at 10%  20%, #fff 100%, transparent),
+        radial-gradient(1px 1px at 25%  55%, #fff 100%, transparent),
+        radial-gradient(1px 1px at 40%  10%, #fff 100%, transparent),
+        radial-gradient(1px 1px at 55%  75%, #fff 100%, transparent),
+        radial-gradient(1px 1px at 70%  35%, #fff 100%, transparent),
+        radial-gradient(1px 1px at 85%  60%, #fff 100%, transparent),
+        radial-gradient(1px 1px at 15%  85%, #fff 100%, transparent),
+        radial-gradient(1px 1px at 90%  15%, #fff 100%, transparent),
+        radial-gradient(1.5px 1.5px at 33% 45%, #fff 100%, transparent),
+        radial-gradient(1.5px 1.5px at 66% 88%, #fff 100%, transparent),
+        radial-gradient(1px 1px at 48%  30%, #aac4ff 100%, transparent),
+        radial-gradient(1px 1px at 78%  50%, #aac4ff 100%, transparent),
+        radial-gradient(2px 2px at 92%  80%, #fff 100%, transparent),
+        radial-gradient(1px 1px at 20%  5%,  #fff 100%, transparent),
+        radial-gradient(1px 1px at 60%  95%, #fff 100%, transparent),
+        radial-gradient(1px 1px at 82%  28%, #fff 100%, transparent);
+      pointer-events: none;
+      z-index: 0;
+      animation: twinkle 6s ease-in-out infinite alternate;
+    }
+    @keyframes twinkle {
+      0%   { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+
+    /* Planets */
+    .planet { position: fixed; border-radius: 50%; z-index: 0; pointer-events: none; }
+
+    .planet-1 {
+      width: 180px; height: 180px; top: -40px; right: -30px;
+      background: radial-gradient(circle at 35% 35%, #f5c97a, #e8873a 50%, #a84a0a 80%, #5c2600);
+      box-shadow: inset -30px -20px 50px rgba(0,0,0,0.6), 0 0 60px rgba(232,135,58,0.25);
+      animation: float1 14s ease-in-out infinite;
+    }
+    .planet-1::after {
+      content: ''; position: absolute;
+      width: 280px; height: 60px;
+      border: 14px solid rgba(245,200,120,0.35); border-radius: 50%;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%) rotateX(75deg);
+    }
+    .planet-2 {
+      width: 130px; height: 130px; bottom: 40px; left: -20px;
+      background: radial-gradient(circle at 35% 35%, #8ecfff, #3a7bd5 45%, #1a3a7a 75%, #0a1a3a);
+      box-shadow: inset -20px -15px 40px rgba(0,0,0,0.5), 0 0 50px rgba(58,123,213,0.3);
+      animation: float2 18s ease-in-out infinite;
+    }
+    .planet-3 {
+      width: 70px; height: 70px; top: 120px; left: 60px;
+      background: radial-gradient(circle at 35% 35%, #d8a8ff, #9b59b6 50%, #5b2c8d 80%, #2c0f4a);
+      box-shadow: inset -12px -10px 25px rgba(0,0,0,0.5), 0 0 30px rgba(155,89,182,0.35);
+      animation: float3 22s ease-in-out infinite;
+    }
+    .planet-4 {
+      width: 50px; height: 50px; top: 45%; right: 80px;
+      background: radial-gradient(circle at 35% 35%, #ff9a8b, #e74c3c 50%, #922b21 80%, #4a0e0a);
+      box-shadow: inset -8px -8px 20px rgba(0,0,0,0.5), 0 0 20px rgba(231,76,60,0.35);
+      animation: float4 16s ease-in-out infinite;
+    }
+    .planet-5 {
+      width: 90px; height: 90px; bottom: 120px; right: 60px;
+      background: radial-gradient(circle at 35% 35%, #a8edba, #27ae60 50%, #1a6b3c 80%, #0a3020);
+      box-shadow: inset -15px -12px 30px rgba(0,0,0,0.5), 0 0 35px rgba(39,174,96,0.3);
+      animation: float5 20s ease-in-out infinite;
+    }
+    .nebula {
+      position: fixed; border-radius: 50%; filter: blur(80px);
+      pointer-events: none; z-index: 0; opacity: 0.12;
+    }
+    .nebula-1 { width:500px; height:500px; top:-100px; left:-100px; background:#5b2fc9; animation: pulse 12s ease-in-out infinite alternate; }
+    .nebula-2 { width:400px; height:400px; bottom:-80px; right:-80px; background:#1a6b8a; animation: pulse 15s ease-in-out infinite alternate-reverse; }
+    .nebula-3 { width:300px; height:300px; top:40%; left:30%; background:#8a1a5a; opacity:0.08; animation: pulse 10s ease-in-out infinite alternate; }
+
+    @keyframes float1 { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(18px) rotate(3deg)} }
+    @keyframes float2 { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-22px)} }
+    @keyframes float3 { 0%,100%{transform:translateY(0) translateX(0)} 50%{transform:translateY(14px) translateX(8px)} }
+    @keyframes float4 { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-16px)} }
+    @keyframes float5 { 0%,100%{transform:translateY(0) translateX(0)} 50%{transform:translateY(12px) translateX(-6px)} }
+    @keyframes pulse  { 0%{opacity:0.08} 100%{opacity:0.18} }
+
+    /* App wrapper */
+    #root {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="nebula nebula-1"></div>
+  <div class="nebula nebula-2"></div>
+  <div class="nebula nebula-3"></div>
+  <div class="planet planet-1"></div>
+  <div class="planet planet-2"></div>
+  <div class="planet planet-3"></div>
+  <div class="planet planet-4"></div>
+  <div class="planet planet-5"></div>
+
+  <div id="root"></div>
+
+  <script type="text/babel">{% raw %}
+    const { useState } = React;
+
+    // ── Inline styles (scoped to React components) ──
+    const styles = {
+      h1: {
+        fontSize: '1.9rem', color: '#e8f4ff', marginBottom: '28px',
+        textShadow: '0 0 20px rgba(100,180,255,0.5)', letterSpacing: '1px',
+      },
+      card: {
+        background: 'rgba(255,255,255,0.07)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        border: '1px solid rgba(255,255,255,0.15)',
+        borderRadius: '16px',
+        boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+        padding: '32px', width: '100%', maxWidth: '440px',
+      },
+      label: {
+        display: 'block', fontWeight: 600, color: '#b8d4f0',
+        marginBottom: '6px', fontSize: '0.9rem',
+      },
+      input: {
+        width: '100%', padding: '10px 14px',
+        border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '8px',
+        fontSize: '1rem', color: '#e8f4ff',
+        background: 'rgba(255,255,255,0.08)', outline: 'none',
+        marginBottom: '16px', fontFamily: 'inherit',
+      },
+      button: {
+        width: '100%', padding: '12px',
+        background: 'linear-gradient(135deg, #4facfe, #00f2fe)',
+        color: '#020b18', border: 'none', borderRadius: '8px',
+        fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
+        marginTop: '8px', letterSpacing: '0.5px',
+      },
+      buttonLoading: {
+        opacity: 0.6, cursor: 'not-allowed',
+      },
+      success: {
+        marginTop: '16px', padding: '10px 14px', borderRadius: '8px',
+        background: 'rgba(72,199,142,0.2)', border: '1px solid rgba(72,199,142,0.4)',
+        color: '#a3f0c6', fontSize: '0.9rem', fontWeight: 500,
+      },
+      error: {
+        marginTop: '16px', padding: '10px 14px', borderRadius: '8px',
+        background: 'rgba(231,76,60,0.2)', border: '1px solid rgba(231,76,60,0.4)',
+        color: '#ffb3a7', fontSize: '0.9rem', fontWeight: 500,
+      },
+      dbInfo: {
+        marginTop: '12px', padding: '10px 14px',
+        background: 'rgba(99,179,255,0.1)', border: '1px solid rgba(99,179,255,0.25)',
+        borderRadius: '8px', fontSize: '0.85rem', color: '#90caf9', wordBreak: 'break-all',
+      },
+      dbLabel: { fontWeight: 600, display: 'block', marginBottom: '2px', color: '#bbdefb' },
+    };
+
+    // ── Form Component ──
+    function Form() {
+      const [name, setName]       = useState('');
+      const [city, setCity]       = useState('');
+      const [message, setMessage] = useState(null);
+      const [isSuccess, setIsSuccess] = useState(false);
+      const [dbInfo, setDbInfo]   = useState(null);
+      const [loading, setLoading] = useState(false);
+
+      async function handleSubmit(e) {
+        e.preventDefault();
+        setLoading(true);
+        setMessage(null);
+        setDbInfo(null);
+
+        try {
+          const res  = await fetch('/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, city }),
+          });
+          const data = await res.json();
+          setIsSuccess(data.success);
+          setMessage(data.message);
+          if (data.success) {
+            setDbInfo(data.db);
+            setName('');
+            setCity('');
+          }
+        } catch (err) {
+          setIsSuccess(false);
+          setMessage('Network error. Please try again.');
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      return (
+        <div style={styles.card}>
+          <form onSubmit={handleSubmit}>
+            <div>
+              <label style={styles.label}>Full Name</label>
+              <input
+                style={styles.input}
+                type="text"
+                placeholder="Enter your name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label style={styles.label}>City</label>
+              <input
+                style={styles.input}
+                type="text"
+                placeholder="Enter your city"
+                value={city}
+                onChange={e => setCity(e.target.value)}
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              style={{ ...styles.button, ...(loading ? styles.buttonLoading : {}) }}
+              disabled={loading}
+            >
+              {loading ? 'Saving...' : 'Save Entry'}
+            </button>
+          </form>
+
+          {message && (
+            <div style={isSuccess ? styles.success : styles.error}>
+              {message}
+            </div>
+          )}
+
+          {dbInfo && (
+            <div style={styles.dbInfo}>
+              <span style={styles.dbLabel}>Database:</span>
+              {dbInfo}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── App Root ──
+    function App() {
+      return (
+        <>
+          <h1 style={styles.h1}>🪐 Name &amp; City Form</h1>
+          <Form />
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  {% endraw %}</script>
+
+</body>
+</html>
