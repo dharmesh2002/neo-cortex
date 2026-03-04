@@ -1,46 +1,84 @@
 import os
 import json
+from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
-DATA_FILE = os.path.join(os.path.dirname(__file__), "data.json")
+BASE_DIR = os.path.dirname(__file__)
+LEADS_FILE = os.path.join(BASE_DIR, "leads.json")
+SUBSCRIBERS_FILE = os.path.join(BASE_DIR, "subscribers.json")
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
+
+def load_json(filepath):
+    if not os.path.exists(filepath):
         return []
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_entry(name, city):
-    entries = load_data()
-    next_id = (entries[-1]["id"] + 1) if entries else 1
-    entries.append({"id": next_id, "name": name, "city": city})
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(entries, f, indent=2)
+
+def save_json(filepath, data):
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
-@app.route("/submit", methods=["POST"])
-def submit():
-    data = request.get_json()
-    name = (data.get("name") or "").strip()
-    city = (data.get("city") or "").strip()
-    if name and city:
-        save_entry(name, city)
-        return jsonify({
-            "success": True,
-            "message": f"Saved: {name} from {city}",
-            "storage": "JSON File"
-        })
-    return jsonify({"success": False, "message": "Please fill in both fields."}), 400
 
-@app.route("/data")
-def data():
-    entries = load_data()
-    return jsonify({"total": len(entries), "entries": list(reversed(entries))})
+@app.route("/api/lead", methods=["POST"])
+def create_lead():
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    if not name or not email:
+        return jsonify({"success": False, "message": "Name and email are required."}), 400
+
+    leads = load_json(LEADS_FILE)
+    next_id = (leads[-1]["id"] + 1) if leads else 1
+    lead = {
+        "id": next_id,
+        "name": name,
+        "email": email,
+        "phone": (data.get("phone") or "").strip(),
+        "company": (data.get("company") or "").strip(),
+        "service": (data.get("service") or "").strip(),
+        "message": (data.get("message") or "").strip(),
+        "status": "new",
+        "created_at": datetime.utcnow().isoformat() + "Z",
+    }
+    leads.append(lead)
+    save_json(LEADS_FILE, leads)
+    return jsonify({"success": True, "message": "Thank you! We'll be in touch soon.", "id": next_id})
+
+
+@app.route("/api/leads", methods=["GET"])
+def get_leads():
+    leads = load_json(LEADS_FILE)
+    return jsonify({"total": len(leads), "leads": list(reversed(leads))})
+
+
+@app.route("/api/subscribe", methods=["POST"])
+def subscribe():
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip()
+    if not email:
+        return jsonify({"success": False, "message": "Email is required."}), 400
+
+    subscribers = load_json(SUBSCRIBERS_FILE)
+    if any(s["email"] == email for s in subscribers):
+        return jsonify({"success": True, "message": "You're already subscribed!"})
+
+    next_id = (subscribers[-1]["id"] + 1) if subscribers else 1
+    subscribers.append({
+        "id": next_id,
+        "email": email,
+        "subscribed_at": datetime.utcnow().isoformat() + "Z",
+    })
+    save_json(SUBSCRIBERS_FILE, subscribers)
+    return jsonify({"success": True, "message": "Successfully subscribed!"})
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
