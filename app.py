@@ -5,21 +5,31 @@ from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
-BASE_DIR = os.path.dirname(__file__)
-LEADS_FILE = os.path.join(BASE_DIR, "leads.json")
-SUBSCRIBERS_FILE = os.path.join(BASE_DIR, "subscribers.json")
+# Use /tmp for data storage — always writable on Railway
+DATA_DIR = os.environ.get("DATA_DIR", "/tmp/neocortex-data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+LEADS_FILE = os.path.join(DATA_DIR, "leads.json")
+SUBSCRIBERS_FILE = os.path.join(DATA_DIR, "subscribers.json")
 
 
 def load_json(filepath):
-    if not os.path.exists(filepath):
+    try:
+        if not os.path.exists(filepath):
+            return []
+        with open(filepath, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError, OSError):
+        # If file is corrupted, start fresh
         return []
-    with open(filepath, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 def save_json(filepath, data):
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    try:
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except (IOError, OSError) as e:
+        print(f"⚠️ Error saving to {filepath}: {e}")
 
 
 @app.route("/")
