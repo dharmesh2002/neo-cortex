@@ -36,8 +36,19 @@ EXCLUDED_INDUSTRY_KEYWORDS = ("airlin", "oil", "gas", "petroleum", "chemical", "
 def _fetch_csv(name: str, url: str, timeout: int = 20) -> pd.DataFrame:
     resp = requests.get(url, headers=_HEADERS, timeout=timeout)
     resp.raise_for_status()
-    df = pd.read_csv(io.StringIO(resp.text))
+    text = resp.text
+
+    # niftyindices.com CSVs occasionally carry a stray preamble line before
+    # the real header, and a rogue unescaped comma in a company name here or
+    # there -- skip to the header row and tolerate ragged data rows rather
+    # than letting one bad line blow up the whole fetch.
+    lines = text.splitlines()
+    header_idx = next((i for i, line in enumerate(lines) if "Symbol" in line), 0)
+    cleaned = "\n".join(lines[header_idx:])
+
+    df = pd.read_csv(io.StringIO(cleaned), engine="python", on_bad_lines="skip")
     df.columns = [c.strip() for c in df.columns]
+    df = df.dropna(subset=["Symbol"])
     df["Index"] = name
     return df
 
