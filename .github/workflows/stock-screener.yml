@@ -1,0 +1,63 @@
+name: Stock Screener
+
+on:
+  schedule:
+    # 15:45 IST Mon-Fri (~15 min after NSE close). Doesn't account for NSE
+    # holidays; on a holiday the run just re-reports the prior trading day.
+    - cron: "15 10 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      capital:
+        description: "Trading capital in INR (for position sizing)"
+        required: false
+        default: "100000"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  screen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r stock_screener/requirements.txt
+
+      - name: Run screener
+        run: |
+          python -m stock_screener \
+            --capital "${{ github.event.inputs.capital || vars.SCREENER_CAPITAL || '100000' }}" \
+            --output-dir output
+
+      - name: Post results as a GitHub issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create stock-screener --color 0E8A16 \
+            --description "Automated Bollinger/RSI/Volume screener results" 2>/dev/null || true
+
+          DATE=$(date -u +%Y-%m-%d)
+          BODY_FILE="output/report_${DATE}.md"
+          if [ -f "$BODY_FILE" ]; then
+            gh issue create --title "Stock Screener — ${DATE}" \
+              --body-file "$BODY_FILE" --label stock-screener
+          else
+            gh issue create --title "Stock Screener — ${DATE} (run failed)" \
+              --body "The screener run did not produce a report file. Check the workflow logs." \
+              --label stock-screener
+          fi
+
+      - name: Upload CSVs as workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screener-output-${{ github.run_id }}
+          path: output/
+          retention-days: 30

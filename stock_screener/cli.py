@@ -40,6 +40,41 @@ def _format_near_miss(near_miss: list) -> pd.DataFrame:
     return df
 
 
+def _build_markdown_report(signals_df: pd.DataFrame, near_miss_df: pd.DataFrame,
+                            universe_size: int, history_fetched: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Stock Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
+        "",
+        f"## Buy signals ({len(signals_df)})",
+        "",
+    ]
+    if signals_df.empty:
+        lines.append("No signals today.")
+    else:
+        lines.append(signals_df.to_markdown(index=False))
+    lines += [
+        "",
+        f"## Near-miss watchlist ({len(near_miss_df)})",
+        "",
+    ]
+    if near_miss_df.empty:
+        lines.append("No near-misses today.")
+    else:
+        lines.append(near_miss_df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "Bollinger Band bounce + RSI(14) bounce + volume confirmation, on Nifty 50 + "
+        "Nifty Next 50 + Nifty Midcap 50. Backtested (2yr, ~482 signals): 36.1% win rate, "
+        "+0.1195 R average expectancy, 86.3% of winners resolve within 2 trading days. "
+        "Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
@@ -81,10 +116,15 @@ def main():
     today = date.today().isoformat()
     signals_path = os.path.join(args.output_dir, f"signals_{today}.csv")
     near_miss_path = os.path.join(args.output_dir, f"near_miss_{today}.csv")
+    report_path = os.path.join(args.output_dir, f"report_{today}.md")
     signals_df.to_csv(signals_path, index=False)
     near_miss_df.to_csv(near_miss_path, index=False)
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write(_build_markdown_report(signals_df, near_miss_df,
+                                        result["universe_size"], result["history_fetched"]))
     print(f"\nSaved: {signals_path}")
     print(f"Saved: {near_miss_path}")
+    print(f"Saved: {report_path}")
 
 
 if __name__ == "__main__":
