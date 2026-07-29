@@ -2,9 +2,11 @@ name: Stock Screener
 
 on:
   schedule:
-    # 15:45 IST Mon-Fri (~15 min after NSE close). Doesn't account for NSE
-    # holidays; on a holiday the run just re-reports the prior trading day.
-    - cron: "15 10 * * 1-5"
+    # 8:00 IST Mon-Fri, before market open. Screens the most recently
+    # completed session's data (Friday's close on a Monday run). Doesn't
+    # account for NSE holidays; on a holiday it just re-reports the same
+    # signals as the prior trading day.
+    - cron: "30 2 * * 1-5"
   workflow_dispatch:
     inputs:
       capital:
