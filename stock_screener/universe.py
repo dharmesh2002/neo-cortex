@@ -33,6 +33,17 @@ EXCLUDED_SECTORS = {"technology", "energy"}
 EXCLUDED_INDUSTRY_KEYWORDS = ("airlin", "oil", "gas", "petroleum", "chemical", "paint")
 
 
+def _find_header_index(lines) -> int:
+    """Locate the real header row: the first line whose comma-split fields
+    contain an exact (case-insensitive) "Symbol" token, not just a line that
+    happens to mention the word in a preamble/disclaimer sentence."""
+    for i, line in enumerate(lines):
+        fields = [f.strip().strip('"').strip("﻿") for f in line.split(",")]
+        if any(f.lower() == "symbol" for f in fields):
+            return i
+    return 0
+
+
 def _fetch_csv(name: str, url: str, timeout: int = 20) -> pd.DataFrame:
     resp = requests.get(url, headers=_HEADERS, timeout=timeout)
     resp.raise_for_status()
@@ -43,11 +54,20 @@ def _fetch_csv(name: str, url: str, timeout: int = 20) -> pd.DataFrame:
     # there -- skip to the header row and tolerate ragged data rows rather
     # than letting one bad line blow up the whole fetch.
     lines = text.splitlines()
-    header_idx = next((i for i, line in enumerate(lines) if "Symbol" in line), 0)
+    header_idx = _find_header_index(lines)
     cleaned = "\n".join(lines[header_idx:])
 
     df = pd.read_csv(io.StringIO(cleaned), engine="python", on_bad_lines="skip")
-    df.columns = [c.strip() for c in df.columns]
+    df.columns = [c.strip().strip("﻿") for c in df.columns]
+
+    rename_map = {c: "Symbol" for c in df.columns if c.lower() == "symbol"}
+    df = df.rename(columns=rename_map)
+    if "Symbol" not in df.columns:
+        raise ValueError(
+            f"No Symbol column found for {name}; got columns {list(df.columns)} "
+            f"(header row detected at line {header_idx}: {lines[header_idx]!r})"
+        )
+
     df = df.dropna(subset=["Symbol"])
     df["Index"] = name
     return df
