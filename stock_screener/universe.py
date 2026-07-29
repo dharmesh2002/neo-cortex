@@ -59,7 +59,7 @@ def _find_header_index(lines) -> int:
     return 0
 
 
-def _fetch_csv(name: str, url: str, timeout: int = 20) -> pd.DataFrame:
+def _fetch_csv(name: str, url: str, timeout: int = 45) -> pd.DataFrame:
     resp = requests.get(url, headers=_HEADERS, timeout=timeout)
     resp.raise_for_status()
     text = resp.text
@@ -113,7 +113,7 @@ def _fetch_with_retries(name: str, urls, retries: int, backoff: float) -> pd.Dat
     )
 
 
-def build_universe(csv_dir: str = None, retries: int = 2, backoff: float = 3.0) -> pd.DataFrame:
+def build_universe(csv_dir: str = None, retries: int = 3, backoff: float = 5.0) -> pd.DataFrame:
     """Return a DataFrame of the current 150-stock universe with a Ticker column.
 
     By default fetches fresh CSVs from niftyindices.com. If that site is
