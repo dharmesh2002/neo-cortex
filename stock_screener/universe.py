@@ -12,10 +12,19 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-INDEX_URLS = {
-    "NIFTY50": "https://niftyindices.com/IndexConstituent/ind_nifty50list.csv",
-    "NIFTYNEXT50": "https://niftyindices.com/IndexConstituent/ind_niftynext50list.csv",
-    "NIFTYMIDCAP50": "https://niftyindices.com/IndexConstituent/ind_nifty_midcap50list.csv",
+# Every failed live run so far has failed *only* on the midcap50 URL, never
+# NIFTY50 or NIFTYNEXT50 -- consistent per-URL failure, not a flaky rate
+# limit. Its given URL ("ind_nifty_midcap50list.csv") has an extra underscore
+# that breaks the naming pattern of the other two ("ind_nifty50list.csv",
+# "ind_niftynext50list.csv"), so it's likely just the wrong path. Try the
+# pattern-consistent name first and fall back to the originally given one.
+INDEX_URL_CANDIDATES = {
+    "NIFTY50": ["https://niftyindices.com/IndexConstituent/ind_nifty50list.csv"],
+    "NIFTYNEXT50": ["https://niftyindices.com/IndexConstituent/ind_niftynext50list.csv"],
+    "NIFTYMIDCAP50": [
+        "https://niftyindices.com/IndexConstituent/ind_niftymidcap50list.csv",
+        "https://niftyindices.com/IndexConstituent/ind_nifty_midcap50list.csv",
+    ],
 }
 
 # niftyindices.com sits behind bot protection that rejects requests without a
@@ -86,19 +95,25 @@ def _fetch_csv(name: str, url: str, timeout: int = 20) -> pd.DataFrame:
     return df
 
 
-def _fetch_with_retries(name: str, url: str, retries: int, backoff: float) -> pd.DataFrame:
+def _fetch_with_retries(name: str, urls, retries: int, backoff: float) -> pd.DataFrame:
     last_err = None
-    for attempt in range(retries):
-        try:
-            return _fetch_csv(name, url)
-        except Exception as exc:  # network hiccups, transient 403s, etc.
-            last_err = exc
-            if attempt < retries - 1:
-                time.sleep(backoff * (attempt + 1))
-    raise RuntimeError(f"Failed to fetch {name} constituent list from {url}: {last_err}")
+    last_url = None
+    for url in urls:
+        last_url = url
+        for attempt in range(retries):
+            try:
+                return _fetch_csv(name, url)
+            except Exception as exc:  # network hiccups, transient 403s, wrong URL, etc.
+                last_err = exc
+                if attempt < retries - 1:
+                    time.sleep(backoff * (attempt + 1))
+    raise RuntimeError(
+        f"Failed to fetch {name} constituent list from {len(urls)} candidate URL(s), "
+        f"last tried {last_url}: {last_err}"
+    )
 
 
-def build_universe(csv_dir: str = None, retries: int = 4, backoff: float = 4.0) -> pd.DataFrame:
+def build_universe(csv_dir: str = None, retries: int = 2, backoff: float = 3.0) -> pd.DataFrame:
     """Return a DataFrame of the current 150-stock universe with a Ticker column.
 
     By default fetches fresh CSVs from niftyindices.com. If that site is
@@ -108,9 +123,9 @@ def build_universe(csv_dir: str = None, retries: int = 4, backoff: float = 4.0) 
     -- never reuse an old export, since these lists change every 6 months.
     """
     frames = []
-    for i, (name, url) in enumerate(INDEX_URLS.items()):
+    for i, (name, urls) in enumerate(INDEX_URL_CANDIDATES.items()):
         if csv_dir:
-            filename = url.rsplit("/", 1)[-1]
+            filename = urls[0].rsplit("/", 1)[-1]
             path = f"{csv_dir.rstrip('/')}/{filename}"
             df = pd.read_csv(path)
             df.columns = [c.strip() for c in df.columns]
@@ -118,7 +133,7 @@ def build_universe(csv_dir: str = None, retries: int = 4, backoff: float = 4.0) 
         else:
             if i > 0:
                 time.sleep(_REQUEST_SPACING_SECONDS)
-            df = _fetch_with_retries(name, url, retries, backoff)
+            df = _fetch_with_retries(name, urls, retries, backoff)
         frames.append(df)
 
     combined = pd.concat(frames, ignore_index=True)
