@@ -19,14 +19,20 @@ INDEX_URLS = {
 }
 
 # niftyindices.com sits behind bot protection that rejects requests without a
-# browser-like User-Agent.
+# browser-like User-Agent, and appears to rate-limit/challenge back-to-back
+# requests -- hitting all 3 index URLs with no delay got an HTML block page
+# back (200 OK, body starting "<!DOCTYPE html>") instead of the 3rd CSV.
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
     ),
     "Accept": "text/csv,*/*",
+    "Referer": "https://niftyindices.com/",
 }
+
+# Minimum gap between successive requests to niftyindices.com.
+_REQUEST_SPACING_SECONDS = 3.0
 
 # yfinance sector/industry taxonomy keywords for the standing exclusion list.
 EXCLUDED_SECTORS = {"technology", "energy"}
@@ -48,6 +54,13 @@ def _fetch_csv(name: str, url: str, timeout: int = 20) -> pd.DataFrame:
     resp = requests.get(url, headers=_HEADERS, timeout=timeout)
     resp.raise_for_status()
     text = resp.text
+
+    stripped_lower = text.lstrip().lower()
+    if stripped_lower.startswith("<!doctype html") or stripped_lower.startswith("<html"):
+        raise ValueError(
+            f"{name}: niftyindices.com returned an HTML page instead of a CSV "
+            f"(likely bot-protection/rate-limiting) for {url}"
+        )
 
     # niftyindices.com CSVs occasionally carry a stray preamble line before
     # the real header, and a rogue unescaped comma in a company name here or
@@ -85,7 +98,7 @@ def _fetch_with_retries(name: str, url: str, retries: int, backoff: float) -> pd
     raise RuntimeError(f"Failed to fetch {name} constituent list from {url}: {last_err}")
 
 
-def build_universe(csv_dir: str = None, retries: int = 3, backoff: float = 2.0) -> pd.DataFrame:
+def build_universe(csv_dir: str = None, retries: int = 4, backoff: float = 4.0) -> pd.DataFrame:
     """Return a DataFrame of the current 150-stock universe with a Ticker column.
 
     By default fetches fresh CSVs from niftyindices.com. If that site is
@@ -95,7 +108,7 @@ def build_universe(csv_dir: str = None, retries: int = 3, backoff: float = 2.0) 
     -- never reuse an old export, since these lists change every 6 months.
     """
     frames = []
-    for name, url in INDEX_URLS.items():
+    for i, (name, url) in enumerate(INDEX_URLS.items()):
         if csv_dir:
             filename = url.rsplit("/", 1)[-1]
             path = f"{csv_dir.rstrip('/')}/{filename}"
@@ -103,6 +116,8 @@ def build_universe(csv_dir: str = None, retries: int = 3, backoff: float = 2.0) 
             df.columns = [c.strip() for c in df.columns]
             df["Index"] = name
         else:
+            if i > 0:
+                time.sleep(_REQUEST_SPACING_SECONDS)
             df = _fetch_with_retries(name, url, retries, backoff)
         frames.append(df)
 
