@@ -7,6 +7,7 @@ from datetime import date
 
 import pandas as pd
 
+from .pullback_strategy import run_pullback_screen
 from .screener import run_screen
 
 logger = logging.getLogger(__name__)
@@ -94,11 +95,62 @@ def _build_markdown_report(signals_df: pd.DataFrame, near_miss_df: pd.DataFrame,
     return "\n".join(lines) + "\n"
 
 
+def _format_pullback(matches: list) -> pd.DataFrame:
+    if not matches:
+        return pd.DataFrame()
+    df = pd.DataFrame(matches)
+    df = df[[
+        "ticker", "company", "sector", "industry", "close", "sma50_support",
+        "bb_lower", "bb_mid", "pct_change_today", "roe_pct", "debt_to_equity",
+        "earnings_growth_pct", "recommendation", "avg_daily_value_cr",
+    ]]
+    for col in ["close", "sma50_support", "bb_lower", "bb_mid", "pct_change_today",
+                "roe_pct", "debt_to_equity", "earnings_growth_pct", "avg_daily_value_cr"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_pullback_markdown_report(matches_df: pd.DataFrame, universe_size: int,
+                                     history_fetched: int, technical_candidates: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Quality Pullback Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}). "
+        f"{technical_candidates} passed the technical gate (near 50-day support, between "
+        "Bollinger lower/mid band, no outsized recent move); fundamentals were checked only "
+        "for those.",
+        "",
+        f"## Matches ({len(matches_df)})",
+        "",
+    ]
+    if matches_df.empty:
+        lines.append("No matches today.")
+    else:
+        lines.append(matches_df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "Quality-pullback strategy: close within 2% of the 50-day SMA AND between the "
+        "Bollinger lower and middle band AND no single-day move over 3% in the last 2 "
+        "sessions (the practical stand-in for \"no external/geopolitical shock\" -- there's "
+        "no direct data feed for that), combined with fundamentals (positive earnings/revenue "
+        "growth, ROE > 15%, Debt/Equity < 100, analyst recommendation not Sell/Underperform), "
+        "on Nifty 50 + Nifty Next 50 + Nifty Midcap 50. This is a new, untested strategy -- "
+        "no backtest exists for it yet. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
                     "over Nifty 50 + Nifty Next 50 + Nifty Midcap 50."
     )
+    parser.add_argument("--strategy", choices=["bounce", "pullback"], default="bounce",
+                        help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
+                             "signals. 'pullback': quality stocks resting near 50-day support "
+                             "with strong fundamentals and no recent outsized move.")
     parser.add_argument("--capital", type=float, default=100_000.0,
                         help="Trading capital in INR, used for position sizing (default: 100000).")
     parser.add_argument("--csv-dir", type=str, default=None,
@@ -117,6 +169,31 @@ def main():
         format="%(asctime)s %(levelname)s %(message)s",
     )
 
+    os.makedirs(args.output_dir, exist_ok=True)
+    today = date.today().isoformat()
+
+    if args.strategy == "pullback":
+        result = run_pullback_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        matches_df = _format_pullback(result["matches"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']}), "
+              f"{result['technical_candidates']} passed the technical gate\n")
+
+        print(f"=== QUALITY PULLBACK MATCHES ({len(matches_df)}) ===")
+        print(matches_df.to_string(index=False) if not matches_df.empty else "No matches today.")
+
+        matches_path = os.path.join(args.output_dir, f"pullback_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"pullback_report_{today}.md")
+        matches_df.to_csv(matches_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_pullback_markdown_report(
+                matches_df, result["universe_size"], result["history_fetched"],
+                result["technical_candidates"]))
+        print(f"\nSaved: {matches_path}")
+        print(f"Saved: {report_path}")
+        return
+
     result = run_screen(capital=args.capital, csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
 
     signals_df = _format_signals(result["signals"])
@@ -132,8 +209,6 @@ def main():
     print(f"\n=== NEAR-MISS WATCHLIST ({len(near_miss_df)}) ===")
     print(near_miss_df.to_string(index=False) if not near_miss_df.empty else "No near-misses today.")
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    today = date.today().isoformat()
     signals_path = os.path.join(args.output_dir, f"signals_{today}.csv")
     near_miss_path = os.path.join(args.output_dir, f"near_miss_{today}.csv")
     report_path = os.path.join(args.output_dir, f"report_{today}.md")
