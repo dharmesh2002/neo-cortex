@@ -110,8 +110,26 @@ def _format_pullback(matches: list) -> pd.DataFrame:
     return df
 
 
-def _build_pullback_markdown_report(matches_df: pd.DataFrame, universe_size: int,
-                                     history_fetched: int, technical_candidates: int) -> str:
+def _format_rejected(rejected: list) -> pd.DataFrame:
+    if not rejected:
+        return pd.DataFrame()
+    df = pd.DataFrame(rejected)
+    preferred_cols = [
+        "ticker", "company", "sector", "industry", "reason", "roe_pct",
+        "debt_to_equity", "debt_check_exempt", "earnings_growth_pct",
+        "revenue_growth_pct", "recommendation",
+    ]
+    cols = [c for c in preferred_cols if c in df.columns]
+    df = df[cols]
+    for col in ["roe_pct", "debt_to_equity", "earnings_growth_pct", "revenue_growth_pct"]:
+        if col in df.columns:
+            df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_pullback_markdown_report(matches_df: pd.DataFrame, rejected_df: pd.DataFrame,
+                                     universe_size: int, history_fetched: int,
+                                     technical_candidates: int) -> str:
     today = date.today().isoformat()
     lines = [
         f"# Quality Pullback Screener — {today}",
@@ -130,14 +148,28 @@ def _build_pullback_markdown_report(matches_df: pd.DataFrame, universe_size: int
         lines.append(matches_df.to_markdown(index=False))
     lines += [
         "",
+        f"## Rejected on fundamentals/sector ({len(rejected_df)})",
+        "",
+        "Shows exactly which check(s) each technical candidate failed, so a low match count "
+        "is verifiable rather than a black box.",
+        "",
+    ]
+    if rejected_df.empty:
+        lines.append("None.")
+    else:
+        lines.append(rejected_df.to_markdown(index=False))
+    lines += [
+        "",
         "---",
         "Quality-pullback strategy: close within 2% of the 50-day SMA AND between the "
         "Bollinger lower and middle band AND no single-day move over 3% in the last 2 "
         "sessions (the practical stand-in for \"no external/geopolitical shock\" -- there's "
         "no direct data feed for that), combined with fundamentals (positive earnings/revenue "
-        "growth, ROE > 15%, Debt/Equity < 100, analyst recommendation not Sell/Underperform), "
-        "on Nifty 50 + Nifty Next 50 + Nifty Midcap 50. This is a new, untested strategy -- "
-        "no backtest exists for it yet. Not investment advice.",
+        "growth, ROE > 15%, Debt/Equity < 100 -- exempted for Financial Services, whose normal "
+        "business model runs much higher leverage than a non-financial company -- and analyst "
+        "recommendation not Sell/Underperform), on Nifty 50 + Nifty Next 50 + Nifty Midcap 50. "
+        "This is a new, untested strategy -- no backtest exists for it yet. Not investment "
+        "advice.",
     ]
     return "\n".join(lines) + "\n"
 
@@ -175,6 +207,7 @@ def main():
     if args.strategy == "pullback":
         result = run_pullback_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
         matches_df = _format_pullback(result["matches"])
+        rejected_df = _format_rejected(result["rejected"])
 
         print(f"\nUniverse: {result['universe_size']} tickers "
               f"(price history fetched for {result['history_fetched']}), "
@@ -183,14 +216,20 @@ def main():
         print(f"=== QUALITY PULLBACK MATCHES ({len(matches_df)}) ===")
         print(matches_df.to_string(index=False) if not matches_df.empty else "No matches today.")
 
+        print(f"\n=== REJECTED ON FUNDAMENTALS/SECTOR ({len(rejected_df)}) ===")
+        print(rejected_df.to_string(index=False) if not rejected_df.empty else "None.")
+
         matches_path = os.path.join(args.output_dir, f"pullback_{today}.csv")
+        rejected_path = os.path.join(args.output_dir, f"pullback_rejected_{today}.csv")
         report_path = os.path.join(args.output_dir, f"pullback_report_{today}.md")
         matches_df.to_csv(matches_path, index=False)
+        rejected_df.to_csv(rejected_path, index=False)
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(_build_pullback_markdown_report(
-                matches_df, result["universe_size"], result["history_fetched"],
+                matches_df, rejected_df, result["universe_size"], result["history_fetched"],
                 result["technical_candidates"]))
         print(f"\nSaved: {matches_path}")
+        print(f"Saved: {rejected_path}")
         print(f"Saved: {report_path}")
         return
 

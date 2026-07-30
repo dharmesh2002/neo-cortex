@@ -31,6 +31,14 @@ MAX_RECENT_MOVE_PCT = 3.0  # exclude if yesterday's or today's move exceeds this
 MIN_ROE = 0.15
 MAX_DEBT_TO_EQUITY = 100.0
 BAD_RECOMMENDATIONS = {"sell", "underperform"}
+
+# Banks/NBFCs run high leverage as their normal business model (deposits and
+# borrowings ARE the business, not distress) -- a Debt/Equity ratio that would
+# flag a manufacturer as overleveraged is routine for this sector. Applying
+# the same MAX_DEBT_TO_EQUITY threshold there would reject nearly the entire
+# sector regardless of actual financial health, so the low-debt check is
+# skipped (treated as automatically satisfied) for these sectors.
+DEBT_CHECK_EXEMPT_SECTORS = {"financial services", "financials"}
 LIQUIDITY_THRESHOLD_INR = 20 * 1e7  # 20 crore, same liquidity bar as the bounce strategy
 BB_WINDOW = 20
 MIN_HISTORY_ROWS = 60
@@ -118,19 +126,21 @@ def fetch_fundamentals(ticker: str, sleep_seconds: float = 0.0) -> Dict:
     return info
 
 
-def fundamentals_ok(info: Dict) -> Dict:
+def fundamentals_ok(info: Dict, sector: str = "") -> Dict:
     earnings_growth = info.get("earningsGrowth")
     revenue_growth = info.get("revenueGrowth")
     roe = info.get("returnOnEquity")
     debt_to_equity = info.get("debtToEquity")
     recommendation = (info.get("recommendationKey") or "").lower()
 
+    debt_check_exempt = (sector or "").strip().lower() in DEBT_CHECK_EXEMPT_SECTORS
+
     profitable_and_growing = bool(
         (earnings_growth is not None and earnings_growth > 0)
         or (revenue_growth is not None and revenue_growth > 0)
     )
     efficient = bool(roe is not None and roe > MIN_ROE)
-    low_debt = bool(debt_to_equity is not None and debt_to_equity < MAX_DEBT_TO_EQUITY)
+    low_debt = debt_check_exempt or bool(debt_to_equity is not None and debt_to_equity < MAX_DEBT_TO_EQUITY)
     analyst_backed = bool(recommendation and recommendation not in BAD_RECOMMENDATIONS)
 
     return {
@@ -138,6 +148,7 @@ def fundamentals_ok(info: Dict) -> Dict:
         "efficient_roe": efficient,
         "low_debt": low_debt,
         "analyst_backed": analyst_backed,
+        "debt_check_exempt": debt_check_exempt,
         "earnings_growth": earnings_growth,
         "revenue_growth": revenue_growth,
         "roe": roe,
@@ -169,16 +180,45 @@ def run_pullback_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) ->
             technical_candidates.append(result)
 
     matches: List[dict] = []
+    rejected: List[dict] = []
     for cand in technical_candidates:
         info = fetch_fundamentals(cand.ticker, info_sleep_seconds)
         sector = info.get("sector", "")
         industry = info.get("industry", "")
         if is_excluded(sector, industry):
+            rejected.append({
+                "ticker": cand.ticker,
+                "company": ticker_to_company.get(cand.ticker, cand.ticker),
+                "sector": sector,
+                "industry": industry,
+                "reason": "excluded sector/industry",
+            })
             continue
 
-        f = fundamentals_ok(info)
-        if not (f["profitable_and_growing"] and f["efficient_roe"]
-                and f["low_debt"] and f["analyst_backed"]):
+        f = fundamentals_ok(info, sector=sector)
+        failed_checks = [
+            name for name, ok in [
+                ("profitable_and_growing", f["profitable_and_growing"]),
+                ("efficient_roe", f["efficient_roe"]),
+                ("low_debt", f["low_debt"]),
+                ("analyst_backed", f["analyst_backed"]),
+            ] if not ok
+        ]
+
+        if failed_checks:
+            rejected.append({
+                "ticker": cand.ticker,
+                "company": ticker_to_company.get(cand.ticker, cand.ticker),
+                "sector": sector,
+                "industry": industry,
+                "reason": ", ".join(failed_checks),
+                "roe_pct": (f["roe"] * 100) if f["roe"] is not None else None,
+                "debt_to_equity": f["debt_to_equity"],
+                "debt_check_exempt": f["debt_check_exempt"],
+                "earnings_growth_pct": (f["earnings_growth"] * 100) if f["earnings_growth"] is not None else None,
+                "revenue_growth_pct": (f["revenue_growth"] * 100) if f["revenue_growth"] is not None else None,
+                "recommendation": f["recommendation"],
+            })
             continue
 
         matches.append({
@@ -200,6 +240,7 @@ def run_pullback_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) ->
 
     return {
         "matches": matches,
+        "rejected": rejected,
         "universe_size": len(tickers),
         "history_fetched": len(history),
         "technical_candidates": len(technical_candidates),
