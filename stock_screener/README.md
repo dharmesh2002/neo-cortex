@@ -35,6 +35,28 @@ from the version that was backtested** (2yr, ~482 signals, 36.1% win rate,
 been re-backtested; treat its output as unproven until validated against
 history.
 
+## Quality Pullback strategy (alternative mode)
+
+A second, independent strategy for a different market condition: instead of
+chasing an oversold bounce, it looks for fundamentally strong stocks resting
+quietly near support, with no sign of a recent shock. A stock must pass all
+of:
+
+1. **Near 50-day support** — close within 2% of its 50-day SMA.
+2. **Between Bollinger lower and middle band** — a pullback, not a crash.
+3. **Quiet** — no single-day move over 3% in the last 2 sessions. There's no
+   data feed for "affected by [some geopolitical event]" specifically, so an
+   unusually large recent move (either direction) stands in as the closest
+   computable proxy — combined with the existing Energy/Oil/Gas exclusions,
+   which already remove the names most directly exposed to an oil-price
+   shock.
+4. **Fundamentally strong** — positive earnings or revenue growth, ROE > 15%,
+   Debt/Equity < 100, and an analyst consensus that isn't Sell/Underperform.
+
+Run it with `--strategy pullback`. This is a brand-new strategy with **no
+backtest** behind it yet — treat its output as a starting watchlist to
+research further, not a validated signal.
+
 ## Setup
 
 ```bash
@@ -44,7 +66,8 @@ pip install -r stock_screener/requirements.txt
 ## Usage
 
 ```bash
-python -m stock_screener --capital 100000
+python -m stock_screener --capital 100000                 # default: bounce strategy
+python -m stock_screener --strategy pullback               # quality pullback strategy
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
