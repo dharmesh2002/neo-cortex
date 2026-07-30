@@ -22,11 +22,24 @@ LIQUIDITY_THRESHOLD_INR = 20 * 1e7  # 20 crore
 ATR_STOP_MULTIPLE = 0.75
 TARGET_GAIN_PCT = 0.03
 RISK_PER_TRADE_PCT = 0.005
-RSI_OVERSOLD_LEVEL = 35
 RSI_LOOKBACK_DAYS = 5
 BB_WINDOW = 20
 RSI_PERIOD = 14
 ATR_PERIOD = 14
+
+# NOTE: as of 2026-07-30, the RSI condition no longer requires RSI(14) to have
+# dipped to a fixed oversold level (previously <=35) before turning up. A
+# Bollinger touch can happen with RSI never reaching classic oversold if the
+# stock is in a genuine, healthy pullback rather than a beaten-down reversal --
+# the fixed RSI floor was rejecting real setups just as often as fake ones.
+# In its place, a Relative Strength check (today's % change vs. the average %
+# change across the whole screened universe) now does the quality-filtering
+# job: it distinguishes a stock moving on its own strength from one merely
+# riding a sector/market-wide tailwind. This changes what counts as a
+# "signal" from the original 3-condition rule the 36.1% win-rate / +0.1195R
+# backtest was run against -- those stats have NOT been re-validated against
+# this 4-condition version. Treat results from this ruleset as unproven until
+# re-backtested.
 
 # Need enough history for the 20-day BB window, 20-day volume average, RSI/ATR
 # warmup, and the 5-day RSI lookback with a comfortable safety margin.
@@ -49,14 +62,17 @@ class TickerSignal:
     volume_today: float
     avg_volume_prior20: float
     avg_daily_value_20d: float
+    pct_change: float
     bb_condition: bool
     rsi_condition: bool
     volume_condition: bool
     liquidity_ok: bool
+    excess_return_pct: float = 0.0
+    rs_condition: bool = False
 
     @property
     def conditions_met(self) -> int:
-        return sum([self.bb_condition, self.rsi_condition, self.volume_condition])
+        return sum([self.bb_condition, self.rsi_condition, self.volume_condition, self.rs_condition])
 
     @property
     def missing_conditions(self) -> List[str]:
@@ -64,9 +80,11 @@ class TickerSignal:
         if not self.bb_condition:
             missing.append("Bollinger bounce")
         if not self.rsi_condition:
-            missing.append("RSI bounce")
+            missing.append("RSI turning up")
         if not self.volume_condition:
             missing.append("Volume confirmation")
+        if not self.rs_condition:
+            missing.append("Relative strength vs universe")
         return missing
 
 
@@ -125,9 +143,13 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[TickerSignal]:
     bb_condition = bool(
         low_today <= lower_today and close_today > lower_today and close_today > close_prev
     )
-    rsi_condition = bool(rsi_min_5d <= RSI_OVERSOLD_LEVEL and rsi_today > rsi_prev)
+    # RSI turning up is enough on its own -- the fixed oversold floor was
+    # dropped (see module note above); Relative Strength vs. the universe now
+    # does the job of separating a real move from a tailwind-driven one.
+    rsi_condition = bool(rsi_today > rsi_prev)
     volume_condition = bool(volume.iloc[-1] > avg_volume_prior20.iloc[-1])
     liquidity_ok = bool(avg_daily_value_20d.iloc[-1] >= LIQUIDITY_THRESHOLD_INR)
+    pct_change = float((close_today / close_prev - 1) * 100) if close_prev else 0.0
 
     return TickerSignal(
         ticker="",
@@ -143,6 +165,7 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[TickerSignal]:
         volume_today=float(volume.iloc[-1]),
         avg_volume_prior20=float(avg_volume_prior20.iloc[-1]),
         avg_daily_value_20d=float(avg_daily_value_20d.iloc[-1]),
+        pct_change=pct_change,
         bb_condition=bb_condition,
         rsi_condition=rsi_condition,
         volume_condition=volume_condition,
@@ -208,19 +231,34 @@ def run_screen(capital: float = 100_000.0, csv_dir: str = None,
     history = fetch_price_history(tickers)
     logger.info("Fetched history for %d/%d tickers", len(history), len(tickers))
 
-    signals: List[dict] = []
-    near_miss: List[dict] = []
-
+    # Pass 1: evaluate every ticker once, and use the whole universe's today's
+    # % change as the market/sector-tailwind benchmark for Relative Strength.
+    evaluated: Dict[str, TickerSignal] = {}
     for ticker, df in history.items():
         result = evaluate_ticker(df)
         if result is None:
             continue
         result.ticker = ticker
+        evaluated[ticker] = result
+
+    if evaluated:
+        universe_avg_pct_change = sum(r.pct_change for r in evaluated.values()) / len(evaluated)
+    else:
+        universe_avg_pct_change = 0.0
+
+    signals: List[dict] = []
+    near_miss: List[dict] = []
+
+    # Pass 2: apply the Relative Strength condition now that the benchmark is
+    # known, then classify into signal / near-miss.
+    for ticker, result in evaluated.items():
+        result.excess_return_pct = result.pct_change - universe_avg_pct_change
+        result.rs_condition = result.excess_return_pct > 0
 
         if not result.liquidity_ok:
             continue
 
-        if result.conditions_met == 3:
+        if result.conditions_met == 4:
             sector_info = fetch_sector_industry(ticker, info_sleep_seconds)
             if is_excluded(sector_info["sector"], sector_info["industry"]):
                 continue
@@ -233,6 +271,8 @@ def run_screen(capital: float = 100_000.0, csv_dir: str = None,
                 "industry": sector_info["industry"],
                 "close": result.close,
                 "atr14": result.atr14,
+                "pct_change": result.pct_change,
+                "excess_return_pct": result.excess_return_pct,
                 "avg_daily_value_cr": result.avg_daily_value_20d / 1e7,
                 "entry": setup.entry,
                 "stop_loss": setup.stop_loss,
@@ -242,7 +282,7 @@ def run_screen(capital: float = 100_000.0, csv_dir: str = None,
                 "risk_amount": setup.risk_amount,
             })
 
-        elif result.conditions_met == 2:
+        elif result.conditions_met == 3:
             sector_info = fetch_sector_industry(ticker, info_sleep_seconds)
             if is_excluded(sector_info["sector"], sector_info["industry"]):
                 continue
@@ -256,6 +296,8 @@ def run_screen(capital: float = 100_000.0, csv_dir: str = None,
                 "missing": ", ".join(result.missing_conditions),
                 "rsi_today": result.rsi_today,
                 "rsi_min_5d": result.rsi_min_5d,
+                "pct_change": result.pct_change,
+                "excess_return_pct": result.excess_return_pct,
                 "avg_daily_value_cr": result.avg_daily_value_20d / 1e7,
             })
 
@@ -264,4 +306,5 @@ def run_screen(capital: float = 100_000.0, csv_dir: str = None,
         "near_miss": near_miss,
         "universe_size": len(tickers),
         "history_fetched": len(history),
+        "universe_avg_pct_change": universe_avg_pct_change,
     }

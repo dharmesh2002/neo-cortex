@@ -17,12 +17,16 @@ def _format_signals(signals: list) -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.DataFrame(signals)
     df = df[[
-        "ticker", "company", "sector", "industry", "close", "atr14",
-        "avg_daily_value_cr", "entry", "stop_loss", "target", "shares",
-        "capital_deployed", "risk_amount",
+        "ticker", "company", "sector", "industry", "close", "pct_change",
+        "excess_return_pct", "atr14", "avg_daily_value_cr", "entry",
+        "stop_loss", "target", "shares", "capital_deployed", "risk_amount",
     ]]
-    for col in ["close", "atr14", "avg_daily_value_cr", "entry", "stop_loss",
-                "target", "capital_deployed", "risk_amount"]:
+    df = df.rename(columns={
+        "pct_change": "day_pct_chg",
+        "excess_return_pct": "vs_universe_pct",
+    })
+    for col in ["close", "day_pct_chg", "vs_universe_pct", "atr14", "avg_daily_value_cr",
+                "entry", "stop_loss", "target", "capital_deployed", "risk_amount"]:
         df[col] = df[col].round(2)
     return df
 
@@ -33,20 +37,29 @@ def _format_near_miss(near_miss: list) -> pd.DataFrame:
     df = pd.DataFrame(near_miss)
     df = df[[
         "ticker", "company", "sector", "industry", "close", "missing",
-        "rsi_today", "rsi_min_5d", "avg_daily_value_cr",
+        "rsi_today", "rsi_min_5d", "pct_change", "excess_return_pct",
+        "avg_daily_value_cr",
     ]]
-    for col in ["close", "rsi_today", "rsi_min_5d", "avg_daily_value_cr"]:
+    df = df.rename(columns={
+        "pct_change": "day_pct_chg",
+        "excess_return_pct": "vs_universe_pct",
+    })
+    for col in ["close", "rsi_today", "rsi_min_5d", "day_pct_chg", "vs_universe_pct",
+                "avg_daily_value_cr"]:
         df[col] = df[col].round(2)
     return df
 
 
 def _build_markdown_report(signals_df: pd.DataFrame, near_miss_df: pd.DataFrame,
-                            universe_size: int, history_fetched: int) -> str:
+                            universe_size: int, history_fetched: int,
+                            universe_avg_pct_change: float) -> str:
     today = date.today().isoformat()
     lines = [
         f"# Stock Screener — {today}",
         "",
-        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}). "
+        f"Universe average day change: {universe_avg_pct_change:.2f}% "
+        "(the tailwind benchmark `vs_universe_pct` is measured against).",
         "",
         f"## Buy signals ({len(signals_df)})",
         "",
@@ -67,9 +80,15 @@ def _build_markdown_report(signals_df: pd.DataFrame, near_miss_df: pd.DataFrame,
     lines += [
         "",
         "---",
-        "Bollinger Band bounce + RSI(14) bounce + volume confirmation, on Nifty 50 + "
-        "Nifty Next 50 + Nifty Midcap 50. Backtested (2yr, ~482 signals): 36.1% win rate, "
-        "+0.1195 R average expectancy, 86.3% of winners resolve within 2 trading days. "
+        "Bollinger Band bounce + RSI(14) turning up (no fixed oversold floor) + volume "
+        "confirmation + Relative Strength vs. the screened universe (positive "
+        "`vs_universe_pct` means the stock is outperforming the average move across the "
+        "universe today, i.e. moving on its own strength rather than riding a sector/market "
+        "tailwind), on Nifty 50 + Nifty Next 50 + Nifty Midcap 50. The original 3-condition "
+        "rule (with a fixed RSI<=35 oversold floor) was backtested over 2yr/~482 signals at "
+        "36.1% win rate, +0.1195 R average expectancy, 86.3% of winners resolving within 2 "
+        "trading days -- this 4-condition version (RSI floor dropped, Relative Strength "
+        "added) has NOT been re-backtested, treat it as unproven until validated. "
         "Not investment advice.",
     ]
     return "\n".join(lines) + "\n"
@@ -104,7 +123,8 @@ def main():
     near_miss_df = _format_near_miss(result["near_miss"])
 
     print(f"\nUniverse: {result['universe_size']} tickers "
-          f"(price history fetched for {result['history_fetched']})\n")
+          f"(price history fetched for {result['history_fetched']}), "
+          f"universe average day change: {result['universe_avg_pct_change']:.2f}%\n")
 
     print(f"=== BUY SIGNALS ({len(signals_df)}) ===")
     print(signals_df.to_string(index=False) if not signals_df.empty else "No signals today.")
@@ -121,7 +141,8 @@ def main():
     near_miss_df.to_csv(near_miss_path, index=False)
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(_build_markdown_report(signals_df, near_miss_df,
-                                        result["universe_size"], result["history_fetched"]))
+                                        result["universe_size"], result["history_fetched"],
+                                        result["universe_avg_pct_change"]))
     print(f"\nSaved: {signals_path}")
     print(f"Saved: {near_miss_path}")
     print(f"Saved: {report_path}")
