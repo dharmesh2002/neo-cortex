@@ -22,6 +22,11 @@ on:
           - bounce
           - pullback
           - support-zone
+          - fundamentals
+      tickers:
+        description: "Comma-separated NSE tickers for strategy=fundamentals, e.g. INFY.NS,TCS.NS"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -45,6 +50,7 @@ jobs:
           python -m stock_screener \
             --strategy "${{ github.event.inputs.strategy || 'bounce' }}" \
             --capital "${{ github.event.inputs.capital || vars.SCREENER_CAPITAL || '100000' }}" \
+            --tickers "${{ github.event.inputs.tickers || '' }}" \
             --output-dir output
 
       - name: Post results as a GitHub issue
@@ -63,6 +69,9 @@ jobs:
           elif [ "$STRATEGY" = "support-zone" ]; then
             BODY_FILE="output/support_zone_report_${DATE}.md"
             TITLE="Support Zone Screener — ${DATE}"
+          elif [ "$STRATEGY" = "fundamentals" ]; then
+            BODY_FILE="output/fundamentals_report_${DATE}.md"
+            TITLE="Fundamentals Check — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"
