@@ -57,6 +57,14 @@ Run it with `--strategy pullback`. This is a brand-new strategy with **no
 backtest** behind it yet — treat its output as a starting watchlist to
 research further, not a validated signal.
 
+## Support Zone strategy (plain technical scan)
+
+A minimal, literal technical scan with no fundamentals and no extra
+conditions layered on top: RSI(14) daily between 30-45, AND close between
+the Bollinger lower and middle band. Only this tool's standing liquidity
+(≥ ₹20cr/day) and sector-exclusion rules are applied — nothing else. Run it
+with `--strategy support-zone`. No backtest exists for this scan either.
+
 ## Setup
 
 ```bash
@@ -68,6 +76,7 @@ pip install -r stock_screener/requirements.txt
 ```bash
 python -m stock_screener --capital 100000                 # default: bounce strategy
 python -m stock_screener --strategy pullback               # quality pullback strategy
+python -m stock_screener --strategy support-zone            # plain RSI 30-45 + BB zone scan
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they

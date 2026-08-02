@@ -21,6 +21,7 @@ on:
         options:
           - bounce
           - pullback
+          - support-zone
 
 permissions:
   contents: read
@@ -59,6 +60,9 @@ jobs:
           if [ "$STRATEGY" = "pullback" ]; then
             BODY_FILE="output/pullback_report_${DATE}.md"
             TITLE="Quality Pullback Screener — ${DATE}"
+          elif [ "$STRATEGY" = "support-zone" ]; then
+            BODY_FILE="output/support_zone_report_${DATE}.md"
+            TITLE="Support Zone Screener — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"
