@@ -77,6 +77,19 @@ given, pass or fail, rather than filtering any out.
 python -m stock_screener --strategy fundamentals --tickers INFY.NS,TCS.NS
 ```
 
+## Support/resistance levels (ad-hoc, no screen)
+
+Computes real reference levels for an explicit ticker list: 20/50/100/200-day
+SMAs, recent swing lows (20/60/120/252-day), and the 52-week low/high.
+`nearest_support` is the highest of these below today's close;
+`nearest_resistance` is the lowest above it. These are standard technical
+reference points computed from actual price history, not a promise that
+price will hold or reverse there.
+
+```bash
+python -m stock_screener --strategy levels --tickers ADANIPORTS.NS
+```
+
 ## Setup
 
 ```bash
@@ -90,6 +103,7 @@ python -m stock_screener --capital 100000                 # default: bounce stra
 python -m stock_screener --strategy pullback               # quality pullback strategy
 python -m stock_screener --strategy support-zone            # plain RSI 30-45 + BB zone scan
 python -m stock_screener --strategy fundamentals --tickers TICKER1.NS,TICKER2.NS
+python -m stock_screener --strategy levels --tickers TICKER1.NS,TICKER2.NS
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
