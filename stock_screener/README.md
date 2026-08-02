@@ -117,6 +117,22 @@ on genuine bad news) never do. No backtest exists for this pattern.
 python -m stock_screener --strategy gap-fill
 ```
 
+## Bullish RSI divergence screener
+
+Finds stocks where price made a lower swing low but RSI(14) made a higher (or
+equal) low at the same time -- the classic reading is that downward momentum
+is fading even though price is still falling, which is sometimes an early
+sign a reversal is near. Requires: two distinct swing lows at least 5 trading
+days apart within the last 90 sessions, the more recent one within the last
+12 days, both lows' RSI at or below 50 (so it's a real dip, not noise near
+the highs), price making a lower low while RSI makes a higher low. This is a
+pattern-recognition heuristic, not a guarantee -- divergences can and do fail
+to produce a reversal, and no backtest exists for this screen.
+
+```bash
+python -m stock_screener --strategy divergence
+```
+
 ## Setup
 
 ```bash
@@ -133,6 +149,7 @@ python -m stock_screener --strategy fundamentals --tickers TICKER1.NS,TICKER2.NS
 python -m stock_screener --strategy levels --tickers TICKER1.NS,TICKER2.NS
 python -m stock_screener --strategy nifty50-scan            # combined scan, all Nifty 50
 python -m stock_screener --strategy gap-fill                # unfilled gap-down screener
+python -m stock_screener --strategy divergence               # bullish RSI divergence screener
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
