@@ -7,7 +7,7 @@ from datetime import date
 
 import pandas as pd
 
-from .pullback_strategy import run_pullback_screen
+from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_screen
 from .screener import run_screen
 from .support_zone_strategy import run_support_zone_screen
 
@@ -214,17 +214,62 @@ def _build_support_zone_markdown_report(matches_df: pd.DataFrame, universe_size:
     return "\n".join(lines) + "\n"
 
 
+def _format_fundamentals_check(rows: list) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df = df[[
+        "ticker", "sector", "industry", "roe_pct", "debt_to_equity",
+        "debt_check_exempt", "earnings_growth_pct", "revenue_growth_pct",
+        "recommendation", "profitable_and_growing", "efficient_roe",
+        "low_debt", "analyst_backed", "overall_ok",
+    ]]
+    for col in ["roe_pct", "debt_to_equity", "earnings_growth_pct", "revenue_growth_pct"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_fundamentals_markdown_report(df: pd.DataFrame) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Fundamentals Check — {today}",
+        "",
+        f"Checked {len(df)} ticker(s). Same bar as the pullback strategy: positive "
+        "earnings/revenue growth, ROE > 15%, Debt/Equity < 100 (exempt for Financial "
+        "Services), analyst recommendation not Sell/Underperform. `overall_ok` is True "
+        "only if all four pass -- every ticker is shown regardless, nothing is filtered "
+        "out.",
+        "",
+    ]
+    if df.empty:
+        lines.append("No tickers provided.")
+    else:
+        lines.append(df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
                     "over Nifty 50 + Nifty Next 50 + Nifty Midcap 50."
     )
-    parser.add_argument("--strategy", choices=["bounce", "pullback", "support-zone"], default="bounce",
+    parser.add_argument("--strategy", choices=["bounce", "pullback", "support-zone", "fundamentals"],
+                        default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
                              "with strong fundamentals and no recent outsized move. "
                              "'support-zone': plain technical scan, no fundamentals -- RSI(14) "
-                             "between 30-45 and close between the Bollinger lower/mid band.")
+                             "between 30-45 and close between the Bollinger lower/mid band. "
+                             "'fundamentals': check ROE/debt/growth/rating for an explicit "
+                             "--tickers list, no technical scan.")
+    parser.add_argument("--tickers", type=str, default="",
+                        help="Comma-separated NSE tickers (with .NS suffix) for "
+                             "--strategy fundamentals, e.g. 'INFY.NS,TCS.NS'.")
     parser.add_argument("--capital", type=float, default=100_000.0,
                         help="Trading capital in INR, used for position sizing (default: 100000).")
     parser.add_argument("--csv-dir", type=str, default=None,
@@ -245,6 +290,26 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "fundamentals":
+        tickers = [t.strip() for t in args.tickers.split(",") if t.strip()]
+        if not tickers:
+            parser.error("--strategy fundamentals requires --tickers, e.g. --tickers INFY.NS,TCS.NS")
+
+        rows = check_fundamentals_for_tickers(tickers, sleep_seconds=args.info_sleep)
+        df = _format_fundamentals_check(rows)
+
+        print(f"\n=== FUNDAMENTALS CHECK ({len(df)} ticker(s)) ===")
+        print(df.to_string(index=False) if not df.empty else "No tickers provided.")
+
+        out_path = os.path.join(args.output_dir, f"fundamentals_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"fundamentals_report_{today}.md")
+        df.to_csv(out_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_fundamentals_markdown_report(df))
+        print(f"\nSaved: {out_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "support-zone":
         result = run_support_zone_screen(csv_dir=args.csv_dir)

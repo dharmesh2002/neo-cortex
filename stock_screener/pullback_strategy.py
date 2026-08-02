@@ -157,6 +157,40 @@ def fundamentals_ok(info: Dict, sector: str = "") -> Dict:
     }
 
 
+def check_fundamentals_for_tickers(tickers: List[str], sleep_seconds: float = 0.3) -> List[dict]:
+    """Ad-hoc fundamentals check for an explicit ticker list, independent of
+    any technical scan -- e.g. to annotate a shortlist that came from a pure
+    price/RSI screen with real fundamentals data. Every ticker is reported,
+    passing or not, so nothing is silently dropped."""
+    rows: List[dict] = []
+    for ticker in tickers:
+        info = fetch_fundamentals(ticker, sleep_seconds)
+        sector = info.get("sector", "")
+        industry = info.get("industry", "")
+        f = fundamentals_ok(info, sector=sector)
+        overall_ok = bool(
+            f["profitable_and_growing"] and f["efficient_roe"]
+            and f["low_debt"] and f["analyst_backed"]
+        )
+        rows.append({
+            "ticker": ticker,
+            "sector": sector,
+            "industry": industry,
+            "roe_pct": (f["roe"] * 100) if f["roe"] is not None else None,
+            "debt_to_equity": f["debt_to_equity"],
+            "debt_check_exempt": f["debt_check_exempt"],
+            "earnings_growth_pct": (f["earnings_growth"] * 100) if f["earnings_growth"] is not None else None,
+            "revenue_growth_pct": (f["revenue_growth"] * 100) if f["revenue_growth"] is not None else None,
+            "recommendation": f["recommendation"],
+            "profitable_and_growing": f["profitable_and_growing"],
+            "efficient_roe": f["efficient_roe"],
+            "low_debt": f["low_debt"],
+            "analyst_backed": f["analyst_backed"],
+            "overall_ok": overall_ok,
+        })
+    return rows
+
+
 def run_pullback_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) -> Dict:
     """Universe/price-history fetching is shared with the bounce strategy to
     avoid duplicating the niftyindices.com + yfinance plumbing."""

@@ -65,6 +65,18 @@ the Bollinger lower and middle band. Only this tool's standing liquidity
 (≥ ₹20cr/day) and sector-exclusion rules are applied — nothing else. Run it
 with `--strategy support-zone`. No backtest exists for this scan either.
 
+## Fundamentals check (ad-hoc, no screen)
+
+Check ROE, Debt/Equity, earnings/revenue growth, and analyst rating for an
+explicit list of tickers — e.g. to annotate a shortlist that came from
+another scan (like support-zone, which has no fundamentals filter of its
+own). Uses the same bar as the pullback strategy, but reports every ticker
+given, pass or fail, rather than filtering any out.
+
+```bash
+python -m stock_screener --strategy fundamentals --tickers INFY.NS,TCS.NS
+```
+
 ## Setup
 
 ```bash
@@ -77,6 +89,7 @@ pip install -r stock_screener/requirements.txt
 python -m stock_screener --capital 100000                 # default: bounce strategy
 python -m stock_screener --strategy pullback               # quality pullback strategy
 python -m stock_screener --strategy support-zone            # plain RSI 30-45 + BB zone scan
+python -m stock_screener --strategy fundamentals --tickers TICKER1.NS,TICKER2.NS
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
