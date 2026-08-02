@@ -24,6 +24,7 @@ on:
           - support-zone
           - fundamentals
           - levels
+          - nifty50-scan
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -76,6 +77,9 @@ jobs:
           elif [ "$STRATEGY" = "levels" ]; then
             BODY_FILE="output/levels_report_${DATE}.md"
             TITLE="Support Levels — ${DATE}"
+          elif [ "$STRATEGY" = "nifty50-scan" ]; then
+            BODY_FILE="output/nifty50_scan_report_${DATE}.md"
+            TITLE="Nifty 50 Combined Scan — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"

@@ -90,6 +90,20 @@ price will hold or reverse there.
 python -m stock_screener --strategy levels --tickers ADANIPORTS.NS
 ```
 
+## Nifty 50 combined scan
+
+Runs the same technical-zone classification and fundamentals check across
+all 50 Nifty 50 constituents (no ticker list needed) and ranks them: stocks
+sitting in the "pullback zone" (between the Bollinger lower and middle band
+— a dip, not a crash, not overbought) with fundamentals fully clearing the
+bar come first, sorted by RSI ascending within that group. Everything else
+is still listed below for context. This is a new, untested combined view —
+no backtest exists for it.
+
+```bash
+python -m stock_screener --strategy nifty50-scan
+```
+
 ## Setup
 
 ```bash
@@ -104,6 +118,7 @@ python -m stock_screener --strategy pullback               # quality pullback st
 python -m stock_screener --strategy support-zone            # plain RSI 30-45 + BB zone scan
 python -m stock_screener --strategy fundamentals --tickers TICKER1.NS,TICKER2.NS
 python -m stock_screener --strategy levels --tickers TICKER1.NS,TICKER2.NS
+python -m stock_screener --strategy nifty50-scan            # combined scan, all Nifty 50
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
