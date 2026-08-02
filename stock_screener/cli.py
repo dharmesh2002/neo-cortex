@@ -7,6 +7,7 @@ from datetime import date
 
 import pandas as pd
 
+from .divergence_strategy import run_divergence_screen
 from .gap_fill_strategy import run_gap_fill_screen
 from .nifty50_scan import run_nifty50_scan
 from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_screen
@@ -417,6 +418,50 @@ def _build_gap_fill_markdown_report(df: pd.DataFrame, universe_size: int, histor
     return "\n".join(lines) + "\n"
 
 
+def _format_divergence(matches: list) -> pd.DataFrame:
+    if not matches:
+        return pd.DataFrame()
+    df = pd.DataFrame(matches)
+    df = df[[
+        "ticker", "company", "sector", "industry", "close", "rsi_today",
+        "low1_price", "low1_rsi", "low2_price", "low2_rsi",
+        "price_change_pct", "rsi_change", "days_since_low2", "avg_daily_value_cr",
+    ]]
+    for col in ["close", "rsi_today", "low1_price", "low1_rsi", "low2_price",
+                "low2_rsi", "price_change_pct", "rsi_change", "avg_daily_value_cr"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_divergence_markdown_report(df: pd.DataFrame, universe_size: int, history_fetched: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Bullish RSI Divergence Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
+        "",
+        f"## Matches ({len(df)})",
+        "",
+    ]
+    if df.empty:
+        lines.append("No bullish divergence found in the last 90 trading days.")
+    else:
+        lines.append(df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "Bullish RSI divergence: price makes a lower swing low (low2_price < low1_price) "
+        "while RSI(14) makes a higher low at the same time (low2_rsi > low1_rsi) -- "
+        "downward momentum fading even as price keeps falling, classically read as an "
+        "early sign of a possible reversal. Both swing lows must have RSI <= 50 (a real "
+        "dip, not noise near a strong trend) and the more recent one must be within the "
+        "last 12 trading days. This is a pattern-recognition heuristic, not a guarantee -- "
+        "divergence can persist for a while before (or without) any reversal. No backtest "
+        "exists for this on this universe. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
@@ -424,7 +469,7 @@ def main():
     )
     parser.add_argument("--strategy",
                         choices=["bounce", "pullback", "support-zone", "fundamentals", "levels",
-                                 "nifty50-scan", "gap-fill"],
+                                 "nifty50-scan", "gap-fill", "divergence"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -438,7 +483,9 @@ def main():
                              "'nifty50-scan': combined technical zone + fundamentals across all "
                              "Nifty 50 stocks, ranked by pullback-zone + clean-fundamentals first. "
                              "'gap-fill': stocks with a recent unfilled gap-down (opened >=2% "
-                             "below prior close and haven't closed back up to that level yet).")
+                             "below prior close and haven't closed back up to that level yet). "
+                             "'divergence': bullish RSI divergence -- price makes a lower swing "
+                             "low while RSI(14) makes a higher low at the same time.")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -462,6 +509,24 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "divergence":
+        result = run_divergence_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        df = _format_divergence(result["matches"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']})\n")
+        print(f"=== BULLISH RSI DIVERGENCE ({len(df)}) ===")
+        print(df.to_string(index=False) if not df.empty else "No divergence found.")
+
+        out_path = os.path.join(args.output_dir, f"divergence_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"divergence_report_{today}.md")
+        df.to_csv(out_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_divergence_markdown_report(df, result["universe_size"], result["history_fetched"]))
+        print(f"\nSaved: {out_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "gap-fill":
         result = run_gap_fill_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
