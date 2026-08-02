@@ -23,8 +23,9 @@ on:
           - pullback
           - support-zone
           - fundamentals
+          - levels
       tickers:
-        description: "Comma-separated NSE tickers for strategy=fundamentals, e.g. INFY.NS,TCS.NS"
+        description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
         default: ""
 
@@ -72,6 +73,9 @@ jobs:
           elif [ "$STRATEGY" = "fundamentals" ]; then
             BODY_FILE="output/fundamentals_report_${DATE}.md"
             TITLE="Fundamentals Check — ${DATE}"
+          elif [ "$STRATEGY" = "levels" ]; then
+            BODY_FILE="output/levels_report_${DATE}.md"
+            TITLE="Support Levels — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"
