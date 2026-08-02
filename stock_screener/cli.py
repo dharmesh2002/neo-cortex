@@ -7,6 +7,7 @@ from datetime import date
 
 import pandas as pd
 
+from .gap_fill_strategy import run_gap_fill_screen
 from .nifty50_scan import run_nifty50_scan
 from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_screen
 from .screener import run_screen
@@ -376,6 +377,46 @@ def _build_nifty50_scan_markdown_report(df: pd.DataFrame, universe_size: int, hi
     return "\n".join(lines) + "\n"
 
 
+def _format_gap_fill(matches: list) -> pd.DataFrame:
+    if not matches:
+        return pd.DataFrame()
+    df = pd.DataFrame(matches)
+    df = df[[
+        "ticker", "company", "sector", "industry", "close", "gap_pct",
+        "pre_gap_close", "pct_to_fill", "days_since_gap", "avg_daily_value_cr",
+    ]]
+    for col in ["close", "gap_pct", "pre_gap_close", "pct_to_fill", "avg_daily_value_cr"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_gap_fill_markdown_report(df: pd.DataFrame, universe_size: int, history_fetched: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Unfilled Gap-Down Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
+        "",
+        f"## Matches ({len(df)})",
+        "",
+    ]
+    if df.empty:
+        lines.append("No unfilled gap-downs found in the last 60 trading days.")
+    else:
+        lines.append(df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "Finds the most recent day (within the last 60 sessions) each stock opened at "
+        "least 2% below the prior close (a gap-down), and reports it only if price hasn't "
+        "since closed back up to that pre-gap level. `pct_to_fill` is how far today's "
+        "close is from that level. A gap being unfilled does NOT mean it's likely to fill "
+        "-- some gaps (especially on genuine bad news) never do. No backtest exists for "
+        "this pattern on this universe. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
@@ -383,7 +424,7 @@ def main():
     )
     parser.add_argument("--strategy",
                         choices=["bounce", "pullback", "support-zone", "fundamentals", "levels",
-                                 "nifty50-scan"],
+                                 "nifty50-scan", "gap-fill"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -395,7 +436,9 @@ def main():
                              "'levels': moving averages + recent swing lows/highs (support/"
                              "resistance reference points) for an explicit --tickers list. "
                              "'nifty50-scan': combined technical zone + fundamentals across all "
-                             "Nifty 50 stocks, ranked by pullback-zone + clean-fundamentals first.")
+                             "Nifty 50 stocks, ranked by pullback-zone + clean-fundamentals first. "
+                             "'gap-fill': stocks with a recent unfilled gap-down (opened >=2% "
+                             "below prior close and haven't closed back up to that level yet).")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -419,6 +462,24 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "gap-fill":
+        result = run_gap_fill_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        df = _format_gap_fill(result["matches"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']})\n")
+        print(f"=== UNFILLED GAP-DOWNS ({len(df)}) ===")
+        print(df.to_string(index=False) if not df.empty else "No unfilled gap-downs found.")
+
+        out_path = os.path.join(args.output_dir, f"gap_fill_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"gap_fill_report_{today}.md")
+        df.to_csv(out_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_gap_fill_markdown_report(df, result["universe_size"], result["history_fetched"]))
+        print(f"\nSaved: {out_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "nifty50-scan":
         result = run_nifty50_scan(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)

@@ -104,6 +104,19 @@ no backtest exists for it.
 python -m stock_screener --strategy nifty50-scan
 ```
 
+## Unfilled gap-down screener
+
+Finds stocks that opened at least 2% below the prior day's close (a gap
+down, often on news/results) within the last 60 sessions, and haven't since
+closed back up to that pre-gap level. `pct_to_fill` shows how far the
+current close is from filling it. Sorted by most recent gap first. A gap
+being unfilled does **not** mean it's likely to fill — some gaps (especially
+on genuine bad news) never do. No backtest exists for this pattern.
+
+```bash
+python -m stock_screener --strategy gap-fill
+```
+
 ## Setup
 
 ```bash
@@ -119,6 +132,7 @@ python -m stock_screener --strategy support-zone            # plain RSI 30-45 + 
 python -m stock_screener --strategy fundamentals --tickers TICKER1.NS,TICKER2.NS
 python -m stock_screener --strategy levels --tickers TICKER1.NS,TICKER2.NS
 python -m stock_screener --strategy nifty50-scan            # combined scan, all Nifty 50
+python -m stock_screener --strategy gap-fill                # unfilled gap-down screener
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they

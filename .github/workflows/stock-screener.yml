@@ -25,6 +25,7 @@ on:
           - fundamentals
           - levels
           - nifty50-scan
+          - gap-fill
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -80,6 +81,9 @@ jobs:
           elif [ "$STRATEGY" = "nifty50-scan" ]; then
             BODY_FILE="output/nifty50_scan_report_${DATE}.md"
             TITLE="Nifty 50 Combined Scan — ${DATE}"
+          elif [ "$STRATEGY" = "gap-fill" ]; then
+            BODY_FILE="output/gap_fill_report_${DATE}.md"
+            TITLE="Unfilled Gap-Down Screener — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"
