@@ -9,6 +9,7 @@ import pandas as pd
 
 from .pullback_strategy import run_pullback_screen
 from .screener import run_screen
+from .support_zone_strategy import run_support_zone_screen
 
 logger = logging.getLogger(__name__)
 
@@ -174,15 +175,56 @@ def _build_pullback_markdown_report(matches_df: pd.DataFrame, rejected_df: pd.Da
     return "\n".join(lines) + "\n"
 
 
+def _format_support_zone(matches: list) -> pd.DataFrame:
+    if not matches:
+        return pd.DataFrame()
+    df = pd.DataFrame(matches)
+    df = df[[
+        "ticker", "company", "sector", "industry", "close", "rsi14",
+        "bb_lower", "bb_mid", "bb_upper", "avg_daily_value_cr",
+    ]]
+    for col in ["close", "rsi14", "bb_lower", "bb_mid", "bb_upper", "avg_daily_value_cr"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_support_zone_markdown_report(matches_df: pd.DataFrame, universe_size: int,
+                                         history_fetched: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Support Zone Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
+        "",
+        f"## Matches ({len(matches_df)})",
+        "",
+    ]
+    if matches_df.empty:
+        lines.append("No matches today.")
+    else:
+        lines.append(matches_df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "Plain technical scan, daily chart, no fundamentals and no extra conditions beyond "
+        "this tool's standing liquidity (>= Rs 20cr/day) and sector-exclusion rules: "
+        "RSI(14) between 30 and 45, AND close between the Bollinger lower and middle band "
+        "(20-day SMA +/- 2 std dev). No backtest exists for this scan. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
                     "over Nifty 50 + Nifty Next 50 + Nifty Midcap 50."
     )
-    parser.add_argument("--strategy", choices=["bounce", "pullback"], default="bounce",
+    parser.add_argument("--strategy", choices=["bounce", "pullback", "support-zone"], default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
-                             "with strong fundamentals and no recent outsized move.")
+                             "with strong fundamentals and no recent outsized move. "
+                             "'support-zone': plain technical scan, no fundamentals -- RSI(14) "
+                             "between 30-45 and close between the Bollinger lower/mid band.")
     parser.add_argument("--capital", type=float, default=100_000.0,
                         help="Trading capital in INR, used for position sizing (default: 100000).")
     parser.add_argument("--csv-dir", type=str, default=None,
@@ -203,6 +245,26 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "support-zone":
+        result = run_support_zone_screen(csv_dir=args.csv_dir)
+        matches_df = _format_support_zone(result["matches"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']})\n")
+
+        print(f"=== SUPPORT ZONE MATCHES ({len(matches_df)}) ===")
+        print(matches_df.to_string(index=False) if not matches_df.empty else "No matches today.")
+
+        matches_path = os.path.join(args.output_dir, f"support_zone_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"support_zone_report_{today}.md")
+        matches_df.to_csv(matches_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_support_zone_markdown_report(
+                matches_df, result["universe_size"], result["history_fetched"]))
+        print(f"\nSaved: {matches_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "pullback":
         result = run_pullback_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
