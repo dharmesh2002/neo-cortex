@@ -7,6 +7,7 @@ from datetime import date
 
 import pandas as pd
 
+from .nifty50_scan import run_nifty50_scan
 from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_screen
 from .screener import run_screen
 from .support_levels import check_support_levels_for_tickers
@@ -316,13 +317,73 @@ def _build_support_levels_markdown_report(df: pd.DataFrame) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _format_nifty50_scan(rows: list) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df = df[[
+        "ticker", "company", "sector", "industry", "close", "rsi14", "zone",
+        "roe_pct", "debt_to_equity", "debt_check_exempt", "earnings_growth_pct",
+        "revenue_growth_pct", "recommendation", "overall_ok",
+    ]]
+    for col in ["close", "rsi14", "roe_pct", "debt_to_equity", "earnings_growth_pct", "revenue_growth_pct"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_nifty50_scan_markdown_report(df: pd.DataFrame, universe_size: int, history_fetched: int) -> str:
+    today = date.today().isoformat()
+    better_df = df[(df["zone"] == "pullback zone (lower-mid)") & (df["overall_ok"])] if not df.empty else df
+    lines = [
+        f"# Nifty 50 Combined Scan — {today}",
+        "",
+        f"Universe: {universe_size} Nifty 50 tickers (price history fetched for "
+        f"{history_fetched}). Ranked so stocks in the pullback zone (technically near "
+        "support, not overbought) with clean fundamentals come first, sorted by RSI "
+        "ascending within that group.",
+        "",
+        f"## \"Better\" candidates: pullback zone + fundamentals clear ({len(better_df)})",
+        "",
+    ]
+    if better_df.empty:
+        lines.append("None today -- no stock is both in the pullback zone and passing all "
+                      "four fundamentals checks.")
+    else:
+        lines.append(better_df.to_markdown(index=False))
+    lines += [
+        "",
+        f"## Full ranked list, all {len(df)} Nifty 50 stocks",
+        "",
+    ]
+    if df.empty:
+        lines.append("No data.")
+    else:
+        lines.append(df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "\"zone\" is the stock's current position relative to its own 20-day Bollinger "
+        "Bands: 'pullback zone (lower-mid)' = between the lower and middle band (a dip, "
+        "not a crash); 'at/below lower band' = at or past the extreme; 'upper-mid zone' / "
+        "'at/above upper band' = neutral to strong, not a dip at all. Fundamentals use the "
+        "same bar as the pullback strategy (positive earnings/revenue growth, ROE > 15%, "
+        "Debt/Equity < 100 -- exempt for Financial Services, analyst recommendation not "
+        "Sell/Underperform). A blank roe_pct means Yahoo Finance had no ROE data for that "
+        "ticker, not that ROE is known to be bad -- efficient_roe fails by default on "
+        "missing data. This is a new, untested combined view -- no backtest exists for it. "
+        "Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
                     "over Nifty 50 + Nifty Next 50 + Nifty Midcap 50."
     )
     parser.add_argument("--strategy",
-                        choices=["bounce", "pullback", "support-zone", "fundamentals", "levels"],
+                        choices=["bounce", "pullback", "support-zone", "fundamentals", "levels",
+                                 "nifty50-scan"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -332,7 +393,9 @@ def main():
                              "'fundamentals': check ROE/debt/growth/rating for an explicit "
                              "--tickers list, no technical scan. "
                              "'levels': moving averages + recent swing lows/highs (support/"
-                             "resistance reference points) for an explicit --tickers list.")
+                             "resistance reference points) for an explicit --tickers list. "
+                             "'nifty50-scan': combined technical zone + fundamentals across all "
+                             "Nifty 50 stocks, ranked by pullback-zone + clean-fundamentals first.")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -356,6 +419,25 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "nifty50-scan":
+        result = run_nifty50_scan(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        df = _format_nifty50_scan(result["rows"])
+
+        print(f"\nNifty 50: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']})\n")
+        print(f"=== COMBINED SCAN ({len(df)} ticker(s), ranked) ===")
+        print(df.to_string(index=False) if not df.empty else "No data.")
+
+        out_path = os.path.join(args.output_dir, f"nifty50_scan_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"nifty50_scan_report_{today}.md")
+        df.to_csv(out_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_nifty50_scan_markdown_report(
+                df, result["universe_size"], result["history_fetched"]))
+        print(f"\nSaved: {out_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "levels":
         tickers = [t.strip() for t in args.tickers.split(",") if t.strip()]
