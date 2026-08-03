@@ -166,6 +166,23 @@ window as the plain support-zone backtest, so the two are comparable.
 python -m stock_screener --strategy backtest-support-zone-mtf
 ```
 
+## Support Zone strategy backtest (fixed risk-reward)
+
+Isolates one specific fix to the plain support-zone backtest's mediocre
+result (-0.030R average): the stop-loss already scales with each stock's
+own volatility (entry - 0.75x ATR14), but the target was a fixed +3% for
+every stock regardless of volatility -- so a volatile stock could end up
+with a stop nearly as wide as the target, giving poor payout math even on
+a winning trade. This version makes the target scale the same way as the
+stop: target = entry + 2x the stop distance, so every trade has the same
+built-in 2:1 reward-to-risk ratio. Everything else (the zone definition,
+the stop-loss itself, holding-period rules) is identical to the plain
+backtest, so the two results isolate the effect of this one change.
+
+```bash
+python -m stock_screener --strategy backtest-support-zone-rr
+```
+
 ## Bullish RSI divergence screener
 
 Finds stocks where price made a lower swing low but RSI(14) made a higher (or
@@ -201,6 +218,7 @@ python -m stock_screener --strategy gap-fill                # unfilled gap-down 
 python -m stock_screener --strategy divergence               # bullish RSI divergence screener
 python -m stock_screener --strategy backtest-support-zone    # ~2yr backtest of the support-zone rule
 python -m stock_screener --strategy backtest-support-zone-mtf # + weekly/monthly RSI>50 + volume confirmation
+python -m stock_screener --strategy backtest-support-zone-rr  # fixed 2:1 target-to-stop ratio
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
