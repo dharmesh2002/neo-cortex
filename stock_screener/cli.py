@@ -3,10 +3,12 @@
 import argparse
 import logging
 import os
+from dataclasses import asdict
 from datetime import date
 
 import pandas as pd
 
+from .backtest_support_zone import MAX_HOLDING_DAYS, run_backtest
 from .divergence_strategy import run_divergence_screen
 from .gap_fill_strategy import run_gap_fill_screen
 from .nifty50_scan import run_nifty50_scan
@@ -462,6 +464,64 @@ def _build_divergence_markdown_report(df: pd.DataFrame, universe_size: int, hist
     return "\n".join(lines) + "\n"
 
 
+def _format_backtest_trades(trades: list) -> pd.DataFrame:
+    if not trades:
+        return pd.DataFrame()
+    df = pd.DataFrame([asdict(t) for t in trades])
+    df = df[[
+        "ticker", "signal_date", "entry", "stop_loss", "target", "exit_date",
+        "exit_reason", "exit_price", "days_held", "r_multiple",
+    ]]
+    for col in ["entry", "stop_loss", "target", "exit_price", "r_multiple"]:
+        df[col] = df[col].astype(float).round(4)
+    return df.sort_values("signal_date", ascending=False).reset_index(drop=True)
+
+
+def _build_backtest_markdown_report(result: dict) -> str:
+    today = date.today().isoformat()
+    total = result["total_signals"]
+    lines = [
+        f"# Support Zone Strategy Backtest — {today}",
+        "",
+        f"Backtests the exact rule behind the live `support-zone` strategy: RSI(14) between "
+        f"30 and 45 AND close between the Bollinger lower and middle band, daily chart. "
+        f"Universe: {result['universe_size']} tickers ({result['excluded_count']} excluded "
+        f"by standing sector/industry rules, price history fetched for "
+        f"{result['history_fetched']}), over the last {result['period']}.",
+        "",
+        "## Results",
+        "",
+        f"- **Total signals**: {total} (a fresh entry into the zone counts once, even if the "
+        "stock stays in the zone for several days)",
+        f"- **Win rate**: {result['win_rate_pct']:.1f}% "
+        f"({result['wins']} target hits + {result['time_exit_wins']} of "
+        f"{result['time_exits']} time-exits still net positive, out of {total})",
+        f"- **Average R-multiple**: {result['avg_r_multiple']:+.3f}R per trade",
+        f"- **Stop-outs**: {result['losses']}",
+        f"- **Average days held for winners**: {result['avg_days_held_winners']:.1f}",
+        "",
+        "---",
+        "**Methodology**: same entry/stop/target rule used across this project -- entry at "
+        "the signal day's close, stop-loss at entry - 0.75x ATR14, target at entry x 1.03. A "
+        "trade is closed at the target or the stop, whichever is hit first over the following "
+        f"{MAX_HOLDING_DAYS} trading days; if neither is hit within that window it's closed "
+        "at that day's close (a \"time exit\", counted as a win only if the R-multiple came "
+        "out positive). If a single day's range touches both "
+        "the stop and the target, the stop is assumed to have hit first -- daily bars can't "
+        "show the real intraday sequence, and assuming the worse outcome avoids overstating "
+        "the win rate.",
+        "",
+        "**Caveats**: this uses the *current* 150-stock universe applied backward over the "
+        "full lookback window, not the actual index membership on each historical date -- "
+        "stocks that were added to Nifty 50/Next 50/Midcap 50 more recently (because they "
+        "performed well) get backtested over the same window as long-standing members, which "
+        "tilts results optimistic (survivorship bias). No transaction costs, slippage, or "
+        "taxes are modeled. This is a real historical result for this exact rule, not a "
+        "simulation of what a live trader would have captured. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
@@ -469,7 +529,7 @@ def main():
     )
     parser.add_argument("--strategy",
                         choices=["bounce", "pullback", "support-zone", "fundamentals", "levels",
-                                 "nifty50-scan", "gap-fill", "divergence"],
+                                 "nifty50-scan", "gap-fill", "divergence", "backtest-support-zone"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -485,7 +545,10 @@ def main():
                              "'gap-fill': stocks with a recent unfilled gap-down (opened >=2% "
                              "below prior close and haven't closed back up to that level yet). "
                              "'divergence': bullish RSI divergence -- price makes a lower swing "
-                             "low while RSI(14) makes a higher low at the same time.")
+                             "low while RSI(14) makes a higher low at the same time. "
+                             "'backtest-support-zone': ~2yr historical backtest of the "
+                             "support-zone rule (RSI 30-45 + between Bollinger lower/mid band), "
+                             "reporting real win rate and R-multiple for that exact rule.")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -509,6 +572,27 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "backtest-support-zone":
+        result = run_backtest(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        trades_df = _format_backtest_trades(result["trades"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"({result['excluded_count']} excluded, price history fetched for "
+              f"{result['history_fetched']}) over the last {result['period']}\n")
+        print(f"=== BACKTEST RESULTS ({result['total_signals']} signals) ===")
+        print(f"Win rate: {result['win_rate_pct']:.1f}%  "
+              f"Avg R-multiple: {result['avg_r_multiple']:+.3f}  "
+              f"Wins/Losses/TimeExits: {result['wins']}/{result['losses']}/{result['time_exits']}")
+
+        trades_path = os.path.join(args.output_dir, f"backtest_support_zone_trades_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"backtest_support_zone_report_{today}.md")
+        trades_df.to_csv(trades_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_backtest_markdown_report(result))
+        print(f"\nSaved: {trades_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "divergence":
         result = run_divergence_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)

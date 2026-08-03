@@ -27,6 +27,7 @@ on:
           - nifty50-scan
           - gap-fill
           - divergence
+          - backtest-support-zone
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -88,6 +89,9 @@ jobs:
           elif [ "$STRATEGY" = "divergence" ]; then
             BODY_FILE="output/divergence_report_${DATE}.md"
             TITLE="Bullish RSI Divergence Screener — ${DATE}"
+          elif [ "$STRATEGY" = "backtest-support-zone" ]; then
+            BODY_FILE="output/backtest_support_zone_report_${DATE}.md"
+            TITLE="Support Zone Strategy Backtest — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"

@@ -117,6 +117,28 @@ on genuine bad news) never do. No backtest exists for this pattern.
 python -m stock_screener --strategy gap-fill
 ```
 
+## Support Zone strategy backtest
+
+Answers the question the live `support-zone` scan always leaves open ("no
+backtest exists for this scan"): pulls ~2 years of daily history for the
+150-stock universe, finds every day a stock freshly enters the zone (RSI(14)
+between 30-45 AND close between the Bollinger lower/mid band -- a fresh
+entry only, so a multi-day stay in the zone counts once), and simulates a
+trade using the same entry/stop/target rule used elsewhere in this project
+(entry at that day's close, stop at entry - 0.75x ATR14, target at
+entry x 1.03, closed at whichever is hit first within 20 trading days).
+Reports a real win rate and average R-multiple for this exact rule.
+
+Caveats: uses the *current* 150-stock universe applied backward (not actual
+historical index membership -- survivorship bias tilts results optimistic),
+no transaction costs/slippage modeled, and if a single day's range touches
+both the stop and target the stop is conservatively assumed to hit first
+(daily bars can't show the real intraday order).
+
+```bash
+python -m stock_screener --strategy backtest-support-zone
+```
+
 ## Bullish RSI divergence screener
 
 Finds stocks where price made a lower swing low but RSI(14) made a higher (or
@@ -150,6 +172,7 @@ python -m stock_screener --strategy levels --tickers TICKER1.NS,TICKER2.NS
 python -m stock_screener --strategy nifty50-scan            # combined scan, all Nifty 50
 python -m stock_screener --strategy gap-fill                # unfilled gap-down screener
 python -m stock_screener --strategy divergence               # bullish RSI divergence screener
+python -m stock_screener --strategy backtest-support-zone    # ~2yr backtest of the support-zone rule
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
