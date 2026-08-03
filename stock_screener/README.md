@@ -139,6 +139,33 @@ both the stop and target the stop is conservatively assumed to hit first
 python -m stock_screener --strategy backtest-support-zone
 ```
 
+## Support Zone strategy backtest (multi-timeframe + volume)
+
+A variant of the plain support-zone backtest that adds three conditions on
+top of the daily RSI 30-45 + Bollinger lower/mid band zone, to test whether
+they improve the (roughly break-even, -0.030R) plain rule:
+
+1. **Weekly RSI(14) > 50** and **Monthly RSI(14) > 50** -- the idea being a
+   stock dipping into the daily zone while its higher-timeframe trend is
+   still constructive is a healthy pullback within a strong trend, not a
+   stock genuinely breaking down. Both are computed on resampled
+   weekly/monthly closes and forward-filled onto the daily calendar with no
+   lookahead into an in-progress week/month (each resampled label is that
+   period's own last trading day, so a day still inside an unfinished
+   week/month can only ever see the last *completed* period's value).
+2. **Volume today > the prior 20-day average volume** -- a pickup in volume
+   on the bounce day itself, meant to confirm real buying interest rather
+   than a low-conviction drift back into the zone.
+
+Pulls 5 years of history (to properly warm up weekly/monthly RSI, which each
+need ~14 of their own periods before Wilder's smoothing stops returning
+NaN) but only counts signals within the most recent 2 years, the same
+window as the plain support-zone backtest, so the two are comparable.
+
+```bash
+python -m stock_screener --strategy backtest-support-zone-mtf
+```
+
 ## Bullish RSI divergence screener
 
 Finds stocks where price made a lower swing low but RSI(14) made a higher (or
@@ -173,6 +200,7 @@ python -m stock_screener --strategy nifty50-scan            # combined scan, all
 python -m stock_screener --strategy gap-fill                # unfilled gap-down screener
 python -m stock_screener --strategy divergence               # bullish RSI divergence screener
 python -m stock_screener --strategy backtest-support-zone    # ~2yr backtest of the support-zone rule
+python -m stock_screener --strategy backtest-support-zone-mtf # + weekly/monthly RSI>50 + volume confirmation
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
