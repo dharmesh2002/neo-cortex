@@ -29,6 +29,7 @@ on:
           - divergence
           - backtest-support-zone
           - backtest-support-zone-mtf
+          - backtest-support-zone-rr
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -96,6 +97,9 @@ jobs:
           elif [ "$STRATEGY" = "backtest-support-zone-mtf" ]; then
             BODY_FILE="output/backtest_support_zone_mtf_report_${DATE}.md"
             TITLE="Support Zone Strategy Backtest (Multi-Timeframe + Volume) — ${DATE}"
+          elif [ "$STRATEGY" = "backtest-support-zone-rr" ]; then
+            BODY_FILE="output/backtest_support_zone_rr_report_${DATE}.md"
+            TITLE="Support Zone Strategy Backtest (Fixed Risk-Reward) — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"
