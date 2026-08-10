@@ -1,6 +1,11 @@
-"""Universe construction: Nifty 50 + Nifty Next 50 + Nifty Midcap 50, freshly
-pulled from niftyindices.com every run (the constituent lists are reshuffled
-roughly every six months, so a cached/bundled copy would silently go stale).
+"""Universe construction: Nifty 50 + Nifty Next 50 + Nifty Midcap 50 +
+Nifty Midcap 150 + Nifty Smallcap 100, freshly pulled from niftyindices.com
+every run (the constituent lists are reshuffled roughly every six months,
+so a cached/bundled copy would silently go stale). Midcap 150 and
+Smallcap 100 were added to extend coverage into small/midcap names beyond
+the original large-cap-leaning Nifty 50/Next 50/Midcap 50 set; Midcap 50 is
+already a near-total subset of Midcap 150, so overlap between the two is
+expected and handled by the de-dup below, not a bug.
 """
 
 import io
@@ -25,6 +30,11 @@ INDEX_URL_CANDIDATES = {
         "https://niftyindices.com/IndexConstituent/ind_niftymidcap50list.csv",
         "https://niftyindices.com/IndexConstituent/ind_nifty_midcap50list.csv",
     ],
+    # Broader small/midcap coverage, added on top of the original three
+    # large-cap-leaning indices above -- purely additive, nothing above was
+    # changed or removed.
+    "NIFTYMIDCAP150": ["https://niftyindices.com/IndexConstituent/ind_niftymidcap150list.csv"],
+    "NIFTYSMALLCAP100": ["https://niftyindices.com/IndexConstituent/ind_niftysmallcap100list.csv"],
 }
 
 # niftyindices.com sits behind bot protection that rejects requests without a
@@ -114,13 +124,17 @@ def _fetch_with_retries(name: str, urls, retries: int, backoff: float) -> pd.Dat
 
 
 def build_universe(csv_dir: str = None, retries: int = 3, backoff: float = 5.0) -> pd.DataFrame:
-    """Return a DataFrame of the current 150-stock universe with a Ticker column.
+    """Return a DataFrame of the current Nifty 50 + Next 50 + Midcap 50 +
+    Midcap 150 + Smallcap 100 universe with a Ticker column (duplicates
+    across overlapping indices, e.g. Midcap 50 stocks that are also in
+    Midcap 150, are dropped).
 
     By default fetches fresh CSVs from niftyindices.com. If that site is
     unreachable from this environment, pass csv_dir pointing at a directory
     containing freshly (same-day) downloaded copies named
-    ind_nifty50list.csv, ind_niftynext50list.csv, ind_nifty_midcap50list.csv
-    -- never reuse an old export, since these lists change every 6 months.
+    ind_nifty50list.csv, ind_niftynext50list.csv, ind_nifty_midcap50list.csv,
+    ind_niftymidcap150list.csv, ind_niftysmallcap100list.csv -- never reuse
+    an old export, since these lists change every 6 months.
     """
     frames = []
     for i, (name, urls) in enumerate(INDEX_URL_CANDIDATES.items()):

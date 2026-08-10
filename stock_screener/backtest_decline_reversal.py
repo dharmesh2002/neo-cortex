@@ -1,6 +1,6 @@
 """Historical backtest of the decline-reversal-near-support rule, against
 real market data (not synthetic) -- pulls ~2 years of actual daily history
-for the 150-stock universe from yfinance, the same source every live
+for the screened universe from yfinance, the same source every live
 screener in this project uses, and finds every real historical occurrence
 of the pattern: 3 real trading days each closing lower than the day before,
 followed by a real green reversal candle (closes above its own open and
