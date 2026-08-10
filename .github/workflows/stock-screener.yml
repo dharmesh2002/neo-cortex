@@ -32,6 +32,7 @@ on:
           - backtest-support-zone-rr
           - bounce-fundamentals
           - decline-reversal
+          - backtest-decline-reversal
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -108,6 +109,9 @@ jobs:
           elif [ "$STRATEGY" = "decline-reversal" ]; then
             BODY_FILE="output/decline_reversal_report_${DATE}.md"
             TITLE="Decline-Reversal Near Support Screener — ${DATE}"
+          elif [ "$STRATEGY" = "backtest-decline-reversal" ]; then
+            BODY_FILE="output/backtest_decline_reversal_report_${DATE}.md"
+            TITLE="Decline-Reversal Near Support Backtest — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"
