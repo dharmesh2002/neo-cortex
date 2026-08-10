@@ -208,6 +208,23 @@ this project until it's actually validated against history.
 python -m stock_screener --strategy bounce-fundamentals
 ```
 
+## Decline-Reversal near support screener
+
+Finds stocks where the last 3 trading days each closed lower than the day
+before (a genuine losing streak), followed by today's candle closing above
+its own open (green) AND above yesterday's close (an actual reversal, not
+just a smaller red candle) -- with today's close landing within 2% of a
+real support level (the highest of the 20/50/100/200-day SMAs, the
+20/60/120/252-day swing lows, or the Bollinger lower band, whichever sits
+below today's close). Pure price-action pattern, no fundamentals filter --
+only the standing liquidity and sector/industry exclusion rules apply.
+
+```bash
+python -m stock_screener --strategy decline-reversal
+```
+
+This is a new, untested strategy -- no backtest exists for it yet.
+
 ## Bullish RSI divergence screener
 
 Finds stocks where price made a lower swing low but RSI(14) made a higher (or
@@ -245,6 +262,7 @@ python -m stock_screener --strategy backtest-support-zone    # ~2yr backtest of 
 python -m stock_screener --strategy backtest-support-zone-mtf # + weekly/monthly RSI>50 + volume confirmation
 python -m stock_screener --strategy backtest-support-zone-rr  # fixed 2:1 target-to-stop ratio
 python -m stock_screener --strategy bounce-fundamentals       # bounce event + RSI<45 + volume + fundamentals
+python -m stock_screener --strategy decline-reversal          # 3-day decline + green reversal near support
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
