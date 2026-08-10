@@ -218,6 +218,8 @@ real support level (the highest of the 20/50/100/200-day SMAs, the
 20/60/120/252-day swing lows, or the Bollinger lower band, whichever sits
 below today's close). Pure price-action pattern, no fundamentals filter --
 only the standing liquidity and sector/industry exclusion rules apply.
+Stocks with the same decline+reversal but sitting 2-5% above support
+(instead of within 2%) show up separately in a near-miss watchlist.
 
 ```bash
 python -m stock_screener --strategy decline-reversal

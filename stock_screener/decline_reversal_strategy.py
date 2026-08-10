@@ -26,7 +26,8 @@ from .indicators import bollinger_bands
 logger = logging.getLogger(__name__)
 
 DECLINE_STREAK_DAYS = 3
-SUPPORT_TOLERANCE_PCT = 2.0  # today's close must be within this many % of the nearest support level
+SUPPORT_TOLERANCE_PCT = 2.0  # a "match" must be within this many % of the nearest support level
+NEAR_MISS_TOLERANCE_PCT = 5.0  # a "near miss" is further out but still within this many %
 LIQUIDITY_THRESHOLD_INR = 20 * 1e7
 SMA_WINDOWS = (20, 50, 100, 200)
 SWING_LOW_WINDOWS = (20, 60, 120, 252)
@@ -95,7 +96,12 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[DeclineReversalCandidate]:
     nearest_support = max(below)
     pct_above_support = (close_today - nearest_support) / nearest_support * 100
 
-    if pct_above_support > SUPPORT_TOLERANCE_PCT:
+    # Report anything within NEAR_MISS_TOLERANCE_PCT -- the caller buckets
+    # into "matches" (<= SUPPORT_TOLERANCE_PCT) and "near_miss" (the rest),
+    # so a stock that just had a real decline+reversal but sits a bit
+    # further from support still shows up as a watchlist item instead of
+    # disappearing silently.
+    if pct_above_support > NEAR_MISS_TOLERANCE_PCT:
         return None
 
     return DeclineReversalCandidate(
@@ -122,6 +128,7 @@ def run_decline_reversal_screen(csv_dir: str = None, info_sleep_seconds: float =
     logger.info("Fetched history for %d/%d tickers", len(history), len(tickers))
 
     matches: List[dict] = []
+    near_miss: List[dict] = []
     for ticker, df in history.items():
         cand = evaluate_ticker(df)
         if cand is None:
@@ -132,7 +139,7 @@ def run_decline_reversal_screen(csv_dir: str = None, info_sleep_seconds: float =
         if is_excluded(sector_info["sector"], sector_info["industry"]):
             continue
 
-        matches.append({
+        row = {
             "ticker": ticker,
             "company": ticker_to_company.get(ticker, ticker),
             "sector": sector_info["sector"],
@@ -144,12 +151,19 @@ def run_decline_reversal_screen(csv_dir: str = None, info_sleep_seconds: float =
             "pct_above_support": cand.pct_above_support,
             "decline_streak_days": cand.decline_streak_days,
             "avg_daily_value_cr": cand.avg_daily_value_20d / 1e7,
-        })
+        }
+
+        if cand.pct_above_support <= SUPPORT_TOLERANCE_PCT:
+            matches.append(row)
+        else:
+            near_miss.append(row)
 
     matches.sort(key=lambda r: r["pct_above_support"])
+    near_miss.sort(key=lambda r: r["pct_above_support"])
 
     return {
         "matches": matches,
+        "near_miss": near_miss,
         "universe_size": len(tickers),
         "history_fetched": len(history),
     }

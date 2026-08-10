@@ -13,7 +13,11 @@ from .backtest_support_zone_mtf import run_backtest as run_backtest_mtf
 from .backtest_decline_reversal import run_backtest as run_backtest_decline_reversal
 from .backtest_support_zone_rr import run_backtest as run_backtest_rr
 from .bounce_fundamentals_strategy import run_bounce_fundamentals_screen
-from .decline_reversal_strategy import run_decline_reversal_screen
+from .decline_reversal_strategy import (
+    NEAR_MISS_TOLERANCE_PCT as NEAR_MISS_TOLERANCE_PCT_DR,
+    SUPPORT_TOLERANCE_PCT as SUPPORT_TOLERANCE_PCT_DR,
+    run_decline_reversal_screen,
+)
 from .divergence_strategy import run_divergence_screen
 from .gap_fill_strategy import run_gap_fill_screen
 from .nifty50_scan import run_nifty50_scan
@@ -728,32 +732,48 @@ def _format_decline_reversal(matches: list) -> pd.DataFrame:
     return df
 
 
-def _build_decline_reversal_markdown_report(df: pd.DataFrame, universe_size: int, history_fetched: int) -> str:
+def _build_decline_reversal_markdown_report(matches_df: pd.DataFrame, near_miss_df: pd.DataFrame,
+                                             universe_size: int, history_fetched: int) -> str:
     today = date.today().isoformat()
     lines = [
         f"# Decline-Reversal Near Support Screener — {today}",
         "",
         f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
         "",
-        f"## Matches ({len(df)})",
+        f"## Matches ({len(matches_df)})",
         "",
     ]
-    if df.empty:
+    if matches_df.empty:
         lines.append("No matches today.")
     else:
-        lines.append(df.to_markdown(index=False))
+        lines.append(matches_df.to_markdown(index=False))
+    lines += [
+        "",
+        f"## Near-miss watchlist ({len(near_miss_df)})",
+        "",
+        "Same 3-day decline + green reversal candle, but sitting further from the nearest "
+        f"support level -- between {SUPPORT_TOLERANCE_PCT_DR:.0f}% and "
+        f"{NEAR_MISS_TOLERANCE_PCT_DR:.0f}% above it instead of within "
+        f"{SUPPORT_TOLERANCE_PCT_DR:.0f}%. The reversal already happened; support is just a "
+        "bit further away than the strict bar.",
+        "",
+    ]
+    if near_miss_df.empty:
+        lines.append("No near-misses today.")
+    else:
+        lines.append(near_miss_df.to_markdown(index=False))
     lines += [
         "",
         "---",
         "Finds stocks where the last 3 trading days each closed lower than the day before (a "
         "genuine losing streak), followed by today's candle closing above its own open (green) "
         "AND above yesterday's close (an actual reversal, not just a smaller red candle), with "
-        "today's close landing within 2% of the nearest real support level below it (the "
-        "highest of the 20/50/100/200-day SMAs, 20/60/120/252-day swing lows, and the "
-        "Bollinger lower band that sits below today's close). Pure price-action pattern, no "
-        "fundamentals filter -- only the standing liquidity (>= Rs 20cr/day) and "
-        "sector/industry exclusion rules apply. This is a new, untested strategy -- no "
-        "backtest exists for it yet. Not investment advice.",
+        "today's close landing near the nearest real support level below it (the highest of "
+        "the 20/50/100/200-day SMAs, 20/60/120/252-day swing lows, and the Bollinger lower "
+        "band that sits below today's close). Pure price-action pattern, no fundamentals "
+        "filter -- only the standing liquidity (>= Rs 20cr/day) and sector/industry exclusion "
+        "rules apply. This is a new, untested strategy -- no backtest exists for it yet. Not "
+        "investment advice.",
     ]
     return "\n".join(lines) + "\n"
 
@@ -910,19 +930,26 @@ def main():
 
     if args.strategy == "decline-reversal":
         result = run_decline_reversal_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
-        df = _format_decline_reversal(result["matches"])
+        matches_df = _format_decline_reversal(result["matches"])
+        near_miss_df = _format_decline_reversal(result["near_miss"])
 
         print(f"\nUniverse: {result['universe_size']} tickers "
               f"(price history fetched for {result['history_fetched']})\n")
-        print(f"=== DECLINE-REVERSAL NEAR SUPPORT ({len(df)}) ===")
-        print(df.to_string(index=False) if not df.empty else "No matches found.")
+        print(f"=== DECLINE-REVERSAL NEAR SUPPORT ({len(matches_df)}) ===")
+        print(matches_df.to_string(index=False) if not matches_df.empty else "No matches found.")
+        print(f"\n=== NEAR-MISS WATCHLIST ({len(near_miss_df)}) ===")
+        print(near_miss_df.to_string(index=False) if not near_miss_df.empty else "No near-misses found.")
 
-        out_path = os.path.join(args.output_dir, f"decline_reversal_{today}.csv")
+        matches_path = os.path.join(args.output_dir, f"decline_reversal_{today}.csv")
+        near_miss_path = os.path.join(args.output_dir, f"decline_reversal_near_miss_{today}.csv")
         report_path = os.path.join(args.output_dir, f"decline_reversal_report_{today}.md")
-        df.to_csv(out_path, index=False)
+        matches_df.to_csv(matches_path, index=False)
+        near_miss_df.to_csv(near_miss_path, index=False)
         with open(report_path, "w", encoding="utf-8") as f:
-            f.write(_build_decline_reversal_markdown_report(df, result["universe_size"], result["history_fetched"]))
-        print(f"\nSaved: {out_path}")
+            f.write(_build_decline_reversal_markdown_report(
+                matches_df, near_miss_df, result["universe_size"], result["history_fetched"]))
+        print(f"\nSaved: {matches_path}")
+        print(f"Saved: {near_miss_path}")
         print(f"Saved: {report_path}")
         return
 
