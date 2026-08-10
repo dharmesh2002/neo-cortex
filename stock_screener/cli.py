@@ -11,6 +11,7 @@ import pandas as pd
 from .backtest_support_zone import MAX_HOLDING_DAYS, run_backtest
 from .backtest_support_zone_mtf import run_backtest as run_backtest_mtf
 from .backtest_support_zone_rr import run_backtest as run_backtest_rr
+from .bounce_fundamentals_strategy import run_bounce_fundamentals_screen
 from .divergence_strategy import run_divergence_screen
 from .gap_fill_strategy import run_gap_fill_screen
 from .nifty50_scan import run_nifty50_scan
@@ -646,6 +647,71 @@ def _build_backtest_rr_markdown_report(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _format_bounce_fundamentals(matches: list) -> pd.DataFrame:
+    if not matches:
+        return pd.DataFrame()
+    df = pd.DataFrame(matches)
+    df = df[[
+        "ticker", "company", "sector", "industry", "close", "rsi_today",
+        "pct_above_lower_band", "volume_vs_avg_pct", "roe_pct", "debt_to_equity",
+        "earnings_growth_pct", "recommendation", "avg_daily_value_cr",
+    ]]
+    for col in ["close", "rsi_today", "pct_above_lower_band", "volume_vs_avg_pct",
+                "roe_pct", "debt_to_equity", "earnings_growth_pct", "avg_daily_value_cr"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_bounce_fundamentals_markdown_report(matches_df: pd.DataFrame, rejected_df: pd.DataFrame,
+                                                universe_size: int, history_fetched: int,
+                                                technical_candidates: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Bounce + Fundamentals Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}). "
+        f"{technical_candidates} passed the technical gate (Bollinger bounce + RSI<45 + "
+        "volume above 20-day average); fundamentals were checked only for those.",
+        "",
+        f"## Matches ({len(matches_df)})",
+        "",
+    ]
+    if matches_df.empty:
+        lines.append("No matches today.")
+    else:
+        lines.append(matches_df.to_markdown(index=False))
+    lines += [
+        "",
+        f"## Rejected on fundamentals/sector ({len(rejected_df)})",
+        "",
+        "Shows exactly which check(s) each technical candidate failed, so a low match count "
+        "is verifiable rather than a black box.",
+        "",
+    ]
+    if rejected_df.empty:
+        lines.append("None.")
+    else:
+        lines.append(rejected_df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "Bollinger Band bounce (low touches/dips to the lower band, close recovers above it, "
+        "and closes higher than yesterday) AND RSI(14) < 45 (a loose ceiling, not a fixed "
+        "oversold floor) AND today's volume above the prior 20-day average, combined with "
+        "fundamentals (positive earnings/revenue growth, ROE > 15%, Debt/Equity < 100 -- "
+        "exempt for Financial Services, analyst recommendation not Sell/Underperform), on "
+        "Nifty 50 + Nifty Next 50 + Nifty Midcap 50. Built around the actual bounce *event* "
+        "rather than a passive zone *state* -- this project's backtests found the "
+        "event-based bounce condition was the one part of the original 3-condition rule with "
+        "positive expectancy (+0.1195R), while passive state rules (RSI 30-45 + between the "
+        "Bollinger bands, tested multiple ways) came back consistently break-even-to-negative. "
+        "That said, this exact combination (bounce event + RSI<45 + volume + fundamentals) "
+        "has NOT itself been backtested -- treat it as a new, unproven combination until "
+        "validated against history. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
@@ -654,7 +720,8 @@ def main():
     parser.add_argument("--strategy",
                         choices=["bounce", "pullback", "support-zone", "fundamentals", "levels",
                                  "nifty50-scan", "gap-fill", "divergence", "backtest-support-zone",
-                                 "backtest-support-zone-mtf", "backtest-support-zone-rr"],
+                                 "backtest-support-zone-mtf", "backtest-support-zone-rr",
+                                 "bounce-fundamentals"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -681,7 +748,11 @@ def main():
                              "'backtest-support-zone-rr': same backtest but with a fixed 2:1 "
                              "target-to-stop ratio (target = entry + 2x the ATR-based stop "
                              "distance) instead of a fixed +3% target, to test whether fixing "
-                             "the reward-to-risk mismatch improves the plain rule's expectancy.")
+                             "the reward-to-risk mismatch improves the plain rule's expectancy. "
+                             "'bounce-fundamentals': Bollinger bounce event (low touches lower "
+                             "band, close recovers above it and above yesterday's close) + "
+                             "RSI(14)<45 + volume above 20-day average + fundamentals bar "
+                             "(ROE>15%, D/E<100, growth, analyst not-Sell).")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -705,6 +776,35 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "bounce-fundamentals":
+        result = run_bounce_fundamentals_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        matches_df = _format_bounce_fundamentals(result["matches"])
+        rejected_df = _format_rejected(result["rejected"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']}), "
+              f"{result['technical_candidates']} passed the technical gate\n")
+
+        print(f"=== BOUNCE + FUNDAMENTALS MATCHES ({len(matches_df)}) ===")
+        print(matches_df.to_string(index=False) if not matches_df.empty else "No matches today.")
+
+        print(f"\n=== REJECTED ON FUNDAMENTALS/SECTOR ({len(rejected_df)}) ===")
+        print(rejected_df.to_string(index=False) if not rejected_df.empty else "None.")
+
+        matches_path = os.path.join(args.output_dir, f"bounce_fundamentals_{today}.csv")
+        rejected_path = os.path.join(args.output_dir, f"bounce_fundamentals_rejected_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"bounce_fundamentals_report_{today}.md")
+        matches_df.to_csv(matches_path, index=False)
+        rejected_df.to_csv(rejected_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_bounce_fundamentals_markdown_report(
+                matches_df, rejected_df, result["universe_size"], result["history_fetched"],
+                result["technical_candidates"]))
+        print(f"\nSaved: {matches_path}")
+        print(f"Saved: {rejected_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "backtest-support-zone-rr":
         result = run_backtest_rr(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)

@@ -183,6 +183,31 @@ backtest, so the two results isolate the effect of this one change.
 python -m stock_screener --strategy backtest-support-zone-rr
 ```
 
+## Bounce + Fundamentals screener
+
+Combines the price-action bounce *event* -- low touches/dips to the lower
+Bollinger band, close recovers above it, and closes higher than yesterday --
+with a loose RSI ceiling (RSI(14) < 45, not a fixed oversold floor), volume
+confirmation (today's volume above the prior 20-day average), and the same
+fundamentals bar as the pullback strategy (positive earnings/revenue
+growth, ROE > 15%, Debt/Equity < 100 -- exempt for Financial Services,
+analyst recommendation not Sell/Underperform).
+
+This is deliberately built around the bounce *event* rather than a passive
+"sitting in a zone" *state*: this project's backtests found the event-based
+bounce condition was the one part of the original 3-condition rule with
+positive expectancy (+0.1195R), while every passive state-based variant
+tested (RSI 30-45 + between Bollinger bands, with and without multi-
+timeframe/volume filters, with and without a fixed risk-reward target) came
+back break-even-to-negative. That said, this *exact* combination (bounce
+event + RSI<45 + volume + fundamentals) has not itself been backtested --
+treat it as a new, unproven combination like every other new strategy in
+this project until it's actually validated against history.
+
+```bash
+python -m stock_screener --strategy bounce-fundamentals
+```
+
 ## Bullish RSI divergence screener
 
 Finds stocks where price made a lower swing low but RSI(14) made a higher (or
@@ -219,6 +244,7 @@ python -m stock_screener --strategy divergence               # bullish RSI diver
 python -m stock_screener --strategy backtest-support-zone    # ~2yr backtest of the support-zone rule
 python -m stock_screener --strategy backtest-support-zone-mtf # + weekly/monthly RSI>50 + volume confirmation
 python -m stock_screener --strategy backtest-support-zone-rr  # fixed 2:1 target-to-stop ratio
+python -m stock_screener --strategy bounce-fundamentals       # bounce event + RSI<45 + volume + fundamentals
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
