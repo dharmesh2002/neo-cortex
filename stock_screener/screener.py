@@ -1,6 +1,7 @@
 """Core screening engine: signal detection, near-miss watchlist, and
 entry/stop/target/position-sizing for the Bollinger Band bounce + RSI + volume
-setup on the Nifty 50 / Next 50 / Midcap 50 universe.
+setup on the Nifty 50 / Next 50 / Midcap 50 / Midcap 150 / Smallcap 100
+universe.
 """
 
 import logging
@@ -206,7 +207,7 @@ def fetch_sector_industry(ticker: str, sleep_seconds: float = 0.0) -> Dict[str, 
 
     Called only for tickers that already produced a full signal or a
     near-miss, since .info is a slow, individually-rate-limited call and
-    most of the 150-stock universe won't need it on any given day.
+    most of the universe won't need it on any given day.
     """
     try:
         info = yf.Ticker(ticker).info or {}

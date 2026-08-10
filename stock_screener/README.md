@@ -1,7 +1,8 @@
 # NSE Stock Screener — Bollinger Band Bounce + RSI + Volume
 
-Screens Nifty 50 + Nifty Next 50 + Nifty Midcap 50 (150 stocks) for a same-day
-confluence of:
+Screens Nifty 50 + Nifty Next 50 + Nifty Midcap 50 + Nifty Midcap 150 +
+Nifty Smallcap 100 (large/mid/small-cap coverage, duplicates across
+overlapping indices removed) for a same-day confluence of:
 
 1. **Bollinger Band bounce** — low touches/dips below the lower 20-day ± 2σ
    band, close recovers above it, and closes higher than yesterday.
@@ -121,7 +122,7 @@ python -m stock_screener --strategy gap-fill
 
 Answers the question the live `support-zone` scan always leaves open ("no
 backtest exists for this scan"): pulls ~2 years of daily history for the
-150-stock universe, finds every day a stock freshly enters the zone (RSI(14)
+screened universe, finds every day a stock freshly enters the zone (RSI(14)
 between 30-45 AND close between the Bollinger lower/mid band -- a fresh
 entry only, so a multi-day stay in the zone counts once), and simulates a
 trade using the same entry/stop/target rule used elsewhere in this project
@@ -129,7 +130,7 @@ trade using the same entry/stop/target rule used elsewhere in this project
 entry x 1.03, closed at whichever is hit first within 20 trading days).
 Reports a real win rate and average R-multiple for this exact rule.
 
-Caveats: uses the *current* 150-stock universe applied backward (not actual
+Caveats: uses the *current* universe applied backward (not actual
 historical index membership -- survivorship bias tilts results optimistic),
 no transaction costs/slippage modeled, and if a single day's range touches
 both the stop and target the stop is conservatively assumed to hit first

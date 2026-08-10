@@ -101,7 +101,7 @@ def _build_markdown_report(signals_df: pd.DataFrame, near_miss_df: pd.DataFrame,
         "confirmation + Relative Strength vs. the screened universe (positive "
         "`vs_universe_pct` means the stock is outperforming the average move across the "
         "universe today, i.e. moving on its own strength rather than riding a sector/market "
-        "tailwind), on Nifty 50 + Nifty Next 50 + Nifty Midcap 50. The original 3-condition "
+        "tailwind), on Nifty 50 + Nifty Next 50 + Nifty Midcap 50 + Nifty Midcap 150 + Nifty Smallcap 100. The original 3-condition "
         "rule (with a fixed RSI<=35 oversold floor) was backtested over 2yr/~482 signals at "
         "36.1% win rate, +0.1195 R average expectancy, 86.3% of winners resolving within 2 "
         "trading days -- this 4-condition version (RSI floor dropped, Relative Strength "
@@ -183,7 +183,7 @@ def _build_pullback_markdown_report(matches_df: pd.DataFrame, rejected_df: pd.Da
         "no direct data feed for that), combined with fundamentals (positive earnings/revenue "
         "growth, ROE > 15%, Debt/Equity < 100 -- exempted for Financial Services, whose normal "
         "business model runs much higher leverage than a non-financial company -- and analyst "
-        "recommendation not Sell/Underperform), on Nifty 50 + Nifty Next 50 + Nifty Midcap 50. "
+        "recommendation not Sell/Underperform), on Nifty 50 + Nifty Next 50 + Nifty Midcap 50 + Nifty Midcap 150 + Nifty Smallcap 100. "
         "This is a new, untested strategy -- no backtest exists for it yet. Not investment "
         "advice.",
     ]
@@ -520,7 +520,7 @@ def _build_backtest_markdown_report(result: dict) -> str:
         "show the real intraday sequence, and assuming the worse outcome avoids overstating "
         "the win rate.",
         "",
-        "**Caveats**: this uses the *current* 150-stock universe applied backward over the "
+        "**Caveats**: this uses the *current* universe applied backward over the "
         "full lookback window, not the actual index membership on each historical date -- "
         "stocks that were added to Nifty 50/Next 50/Midcap 50 more recently (because they "
         "performed well) get backtested over the same window as long-standing members, which "
@@ -706,7 +706,7 @@ def _build_bounce_fundamentals_markdown_report(matches_df: pd.DataFrame, rejecte
         "oversold floor) AND today's volume above the prior 20-day average, combined with "
         "fundamentals (positive earnings/revenue growth, ROE > 15%, Debt/Equity < 100 -- "
         "exempt for Financial Services, analyst recommendation not Sell/Underperform), on "
-        "Nifty 50 + Nifty Next 50 + Nifty Midcap 50. Built around the actual bounce *event* "
+        "Nifty 50 + Nifty Next 50 + Nifty Midcap 50 + Nifty Midcap 150 + Nifty Smallcap 100. Built around the actual bounce *event* "
         "rather than a passive zone *state* -- this project's backtests found the "
         "event-based bounce condition was the one part of the original 3-condition rule with "
         "positive expectancy (+0.1195R), while passive state rules (RSI 30-45 + between the "
@@ -825,7 +825,7 @@ def _build_backtest_decline_reversal_markdown_report(result: dict) -> str:
         "stop is assumed to have hit first -- daily bars can't show the real intraday "
         "sequence, and assuming the worse outcome avoids overstating the win rate.",
         "",
-        "**Caveats**: this uses the *current* 150-stock universe applied backward over the "
+        "**Caveats**: this uses the *current* universe applied backward over the "
         "full lookback window, not the actual index membership on each historical date -- "
         "tilts results optimistic (survivorship bias). No transaction costs, slippage, or "
         "taxes are modeled. This is a real historical result computed from real market data "
@@ -837,7 +837,7 @@ def _build_backtest_decline_reversal_markdown_report(result: dict) -> str:
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
-                    "over Nifty 50 + Nifty Next 50 + Nifty Midcap 50."
+                    "over Nifty 50 + Nifty Next 50 + Nifty Midcap 50 + Nifty Midcap 150 + Nifty Smallcap 100."
     )
     parser.add_argument("--strategy",
                         choices=["bounce", "pullback", "support-zone", "fundamentals", "levels",
