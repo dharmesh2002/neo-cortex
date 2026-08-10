@@ -225,6 +225,22 @@ python -m stock_screener --strategy decline-reversal
 
 This is a new, untested strategy -- no backtest exists for it yet.
 
+## Decline-Reversal Near Support backtest
+
+Backtests the exact rule behind the live `decline-reversal` strategy
+against real historical data (not synthetic): 3 real trading days each
+closing lower than the day before, followed by a real green reversal
+candle, landing within 2% of a real, computed support level. Uses the same
+entry/stop/target methodology as every other backtest in this project
+(entry at the signal day's close, stop at entry - 0.75x ATR14, target at
+entry x 1.03) so the resulting win rate/R-multiple is directly comparable
+to the bounce rule (+0.1195R) and support-zone (-0.030R and its variants)
+backtests already run.
+
+```bash
+python -m stock_screener --strategy backtest-decline-reversal
+```
+
 ## Bullish RSI divergence screener
 
 Finds stocks where price made a lower swing low but RSI(14) made a higher (or
@@ -263,6 +279,7 @@ python -m stock_screener --strategy backtest-support-zone-mtf # + weekly/monthly
 python -m stock_screener --strategy backtest-support-zone-rr  # fixed 2:1 target-to-stop ratio
 python -m stock_screener --strategy bounce-fundamentals       # bounce event + RSI<45 + volume + fundamentals
 python -m stock_screener --strategy decline-reversal          # 3-day decline + green reversal near support
+python -m stock_screener --strategy backtest-decline-reversal # ~2yr real-data backtest of that rule
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they

@@ -10,6 +10,7 @@ import pandas as pd
 
 from .backtest_support_zone import MAX_HOLDING_DAYS, run_backtest
 from .backtest_support_zone_mtf import run_backtest as run_backtest_mtf
+from .backtest_decline_reversal import run_backtest as run_backtest_decline_reversal
 from .backtest_support_zone_rr import run_backtest as run_backtest_rr
 from .bounce_fundamentals_strategy import run_bounce_fundamentals_screen
 from .decline_reversal_strategy import run_decline_reversal_screen
@@ -757,6 +758,62 @@ def _build_decline_reversal_markdown_report(df: pd.DataFrame, universe_size: int
     return "\n".join(lines) + "\n"
 
 
+def _format_backtest_decline_reversal_trades(trades: list) -> pd.DataFrame:
+    if not trades:
+        return pd.DataFrame()
+    df = pd.DataFrame([asdict(t) for t in trades])
+    df = df[[
+        "ticker", "signal_date", "entry", "stop_loss", "target", "exit_date",
+        "exit_reason", "exit_price", "days_held", "r_multiple", "pct_above_support",
+    ]]
+    for col in ["entry", "stop_loss", "target", "exit_price", "r_multiple", "pct_above_support"]:
+        df[col] = df[col].astype(float).round(4)
+    return df.sort_values("signal_date", ascending=False).reset_index(drop=True)
+
+
+def _build_backtest_decline_reversal_markdown_report(result: dict) -> str:
+    today = date.today().isoformat()
+    total = result["total_signals"]
+    lines = [
+        f"# Decline-Reversal Near Support Backtest — {today}",
+        "",
+        "Backtests the exact rule behind the live `decline-reversal` strategy against real "
+        "historical data (not synthetic): 3 real trading days each closing lower than the day "
+        "before, followed by a real green reversal candle (closes above its own open and above "
+        "the prior close), landing within 2% of a real, computed support level (SMAs, swing "
+        f"lows, or the Bollinger lower band). Universe: {result['universe_size']} tickers "
+        f"({result['excluded_count']} excluded by standing sector/industry rules, real price "
+        f"history fetched for {result['history_fetched']}), over the last {result['period']}.",
+        "",
+        "## Results",
+        "",
+        f"- **Total signals**: {total} (real historical occurrences of the exact pattern)",
+        f"- **Win rate**: {result['win_rate_pct']:.1f}% "
+        f"({result['wins']} target hits + {result['time_exit_wins']} of "
+        f"{result['time_exits']} time-exits still net positive, out of {total})",
+        f"- **Average R-multiple**: {result['avg_r_multiple']:+.3f}R per trade",
+        f"- **Stop-outs**: {result['losses']}",
+        f"- **Average days held for winners**: {result['avg_days_held_winners']:.1f}",
+        "",
+        "---",
+        "**Methodology**: same entry/stop/target rule used across this project -- entry at "
+        "the signal day's close, stop-loss at entry - 0.75x ATR14, target at entry x 1.03. A "
+        "trade is closed at the target or the stop, whichever is hit first over the following "
+        f"{MAX_HOLDING_DAYS} trading days; if neither is hit within that window it's closed "
+        "at that day's close (a \"time exit\", counted as a win only if the R-multiple came "
+        "out positive). If a single day's range touches both the stop and the target, the "
+        "stop is assumed to have hit first -- daily bars can't show the real intraday "
+        "sequence, and assuming the worse outcome avoids overstating the win rate.",
+        "",
+        "**Caveats**: this uses the *current* 150-stock universe applied backward over the "
+        "full lookback window, not the actual index membership on each historical date -- "
+        "tilts results optimistic (survivorship bias). No transaction costs, slippage, or "
+        "taxes are modeled. This is a real historical result computed from real market data "
+        "for this exact rule, not a simulation against synthetic data. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
@@ -766,7 +823,8 @@ def main():
                         choices=["bounce", "pullback", "support-zone", "fundamentals", "levels",
                                  "nifty50-scan", "gap-fill", "divergence", "backtest-support-zone",
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
-                                 "bounce-fundamentals", "decline-reversal"],
+                                 "bounce-fundamentals", "decline-reversal",
+                                 "backtest-decline-reversal"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -801,7 +859,10 @@ def main():
                              "'decline-reversal': 3 consecutive down days followed by a green "
                              "reversal candle (closes above its own open and above yesterday's "
                              "close) landing within 2% of a real support level (SMAs, swing "
-                             "lows, or Bollinger lower band).")
+                             "lows, or Bollinger lower band). "
+                             "'backtest-decline-reversal': ~2yr real-data historical backtest "
+                             "of the decline-reversal rule, reporting real win rate and "
+                             "R-multiple for that exact rule.")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -825,6 +886,27 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "backtest-decline-reversal":
+        result = run_backtest_decline_reversal(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        trades_df = _format_backtest_decline_reversal_trades(result["trades"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"({result['excluded_count']} excluded, price history fetched for "
+              f"{result['history_fetched']}) over the last {result['period']}\n")
+        print(f"=== BACKTEST RESULTS ({result['total_signals']} signals) ===")
+        print(f"Win rate: {result['win_rate_pct']:.1f}%  "
+              f"Avg R-multiple: {result['avg_r_multiple']:+.3f}  "
+              f"Wins/Losses/TimeExits: {result['wins']}/{result['losses']}/{result['time_exits']}")
+
+        trades_path = os.path.join(args.output_dir, f"backtest_decline_reversal_trades_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"backtest_decline_reversal_report_{today}.md")
+        trades_df.to_csv(trades_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_backtest_decline_reversal_markdown_report(result))
+        print(f"\nSaved: {trades_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "decline-reversal":
         result = run_decline_reversal_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
