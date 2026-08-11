@@ -741,9 +741,11 @@ def _format_decline_reversal(matches: list) -> pd.DataFrame:
     df = df[[
         "ticker", "company", "sector", "industry", "close", "open", "prev_close",
         "nearest_support", "pct_above_support", "decline_streak_days", "avg_daily_value_cr",
+        "close_position_pct", "volume_confirmed", "excess_return_pct",
+        "reversal_quality", "tailwind_risk",
     ]]
     for col in ["close", "open", "prev_close", "nearest_support", "pct_above_support",
-                "avg_daily_value_cr"]:
+                "avg_daily_value_cr", "close_position_pct", "excess_return_pct"]:
         df[col] = df[col].astype(float).round(2)
     return df
 
@@ -790,6 +792,18 @@ def _build_decline_reversal_markdown_report(matches_df: pd.DataFrame, near_miss_
         "filter -- only the standing liquidity (>= Rs 20cr/day) and sector/industry exclusion "
         "rules apply. This is a new, untested strategy -- no backtest exists for it yet. Not "
         "investment advice.",
+        "",
+        "**Reversal-quality columns** (read-only diagnostics -- this is the answer to \"how do "
+        "I know the sell-off is actually done, not a dead-cat bounce\"): `close_position_pct` "
+        "is where today's reversal candle closed within its own high-low range (>=65% = "
+        "closed strong, near the day's high). `volume_confirmed` is today's volume vs. its "
+        "trailing 20-day average -- real participation behind the reversal, not a thin print. "
+        "`excess_return_pct` is today's move minus the average move across the *whole* "
+        "screened universe today (not just other reversal candidates), so a positive value "
+        "means this stock is genuinely bucking the decline on its own, not just moving with a "
+        "broader market recovery (`tailwind_risk` flags the opposite). `reversal_quality` "
+        "tiers by how many of those three agree: strong (3/3), moderate (2/3), developing "
+        "(1/3), weak (0/3).",
     ]
     return "\n".join(lines) + "\n"
 

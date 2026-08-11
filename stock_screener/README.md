@@ -289,6 +289,16 @@ python -m stock_screener --strategy decline-reversal
 
 This is a new, untested strategy -- no backtest exists for it yet.
 
+Every match also carries the same bounce-quality diagnostics as the pullback
+strategy, renamed for this context: `close_position_pct` (did today's
+reversal candle close strong, near its high, or weak, near its low?),
+`volume_confirmed` (real participation vs. a thin print), and
+`excess_return_pct` / `tailwind_risk` (is this stock genuinely bucking the
+decline on its own, or just moving with a broader market recovery?),
+rolled up into `reversal_quality` (strong/moderate/developing/weak). This is
+the direct answer to "how do I know the sell-off is actually done, not a
+dead-cat bounce."
+
 ## Decline-Reversal Near Support backtest
 
 Backtests the exact rule behind the live `decline-reversal` strategy
