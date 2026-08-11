@@ -33,6 +33,7 @@ on:
           - bounce-fundamentals
           - decline-reversal
           - backtest-decline-reversal
+          - buffett
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -112,6 +113,9 @@ jobs:
           elif [ "$STRATEGY" = "backtest-decline-reversal" ]; then
             BODY_FILE="output/backtest_decline_reversal_report_${DATE}.md"
             TITLE="Decline-Reversal Near Support Backtest — ${DATE}"
+          elif [ "$STRATEGY" = "buffett" ]; then
+            BODY_FILE="output/buffett_report_${DATE}.md"
+            TITLE="Warren Buffett Quality Screener — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"
