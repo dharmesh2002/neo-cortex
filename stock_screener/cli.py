@@ -13,6 +13,7 @@ from .backtest_support_zone_mtf import run_backtest as run_backtest_mtf
 from .backtest_decline_reversal import run_backtest as run_backtest_decline_reversal
 from .backtest_support_zone_rr import run_backtest as run_backtest_rr
 from .bounce_fundamentals_strategy import run_bounce_fundamentals_screen
+from .buffett_strategy import run_buffett_screen
 from .decline_reversal_strategy import (
     NEAR_MISS_TOLERANCE_PCT as NEAR_MISS_TOLERANCE_PCT_DR,
     SUPPORT_TOLERANCE_PCT as SUPPORT_TOLERANCE_PCT_DR,
@@ -834,6 +835,53 @@ def _build_backtest_decline_reversal_markdown_report(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _format_buffett(matches: list) -> pd.DataFrame:
+    if not matches:
+        return pd.DataFrame()
+    df = pd.DataFrame(matches)
+    df = df[[
+        "ticker", "company", "sector", "industry", "roe_pct", "debt_to_equity",
+        "debt_check_exempt", "earnings_growth_pct", "revenue_growth_pct",
+        "profit_margin_pct", "free_cash_flow_cr", "trailing_pe", "recommendation",
+    ]]
+    for col in ["roe_pct", "debt_to_equity", "earnings_growth_pct", "revenue_growth_pct",
+                "profit_margin_pct", "free_cash_flow_cr", "trailing_pe"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_buffett_markdown_report(df: pd.DataFrame, universe_size: int, checked: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Warren Buffett Quality Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers ({checked} checked for fundamentals -- this "
+        "strategy has no technical price trigger, so every non-excluded ticker needs a "
+        "fundamentals lookup, unlike the technical-gate-first strategies elsewhere in this "
+        "project).",
+        "",
+        f"## Matches ({len(df)})",
+        "",
+    ]
+    if df.empty:
+        lines.append("No matches today.")
+    else:
+        lines.append(df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "All seven must pass: ROE > 15%, Debt/Equity < 50 (exempt for Financial Services), "
+        "BOTH earnings growth and revenue growth positive (stricter than the pullback "
+        "strategy's either/or), positive free cash flow, profit margin > 10% (a rough, "
+        "computable proxy for pricing power / economic moat -- not a real substitute for "
+        "judging one), trailing P/E under 25 (margin-of-safety proxy), and analyst "
+        "recommendation not Sell/Underperform. This is a pure business-quality + valuation "
+        "snapshot, not a trading signal -- there's no price pattern or entry timing here at "
+        "all. No backtest exists for this combination. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
@@ -844,7 +892,7 @@ def main():
                                  "nifty50-scan", "gap-fill", "divergence", "backtest-support-zone",
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
                                  "bounce-fundamentals", "decline-reversal",
-                                 "backtest-decline-reversal"],
+                                 "backtest-decline-reversal", "buffett"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -882,7 +930,11 @@ def main():
                              "lows, or Bollinger lower band). "
                              "'backtest-decline-reversal': ~2yr real-data historical backtest "
                              "of the decline-reversal rule, reporting real win rate and "
-                             "R-multiple for that exact rule.")
+                             "R-multiple for that exact rule. "
+                             "'buffett': Warren Buffett-style quality/value screener -- ROE>15%, "
+                             "D/E<50, both earnings AND revenue growth positive, positive free "
+                             "cash flow, profit margin>10%, trailing P/E<25, analyst not-Sell. "
+                             "No technical trigger at all, pure business quality + valuation.")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -906,6 +958,24 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "buffett":
+        result = run_buffett_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        df = _format_buffett(result["matches"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"({result['checked']} checked for fundamentals)\n")
+        print(f"=== WARREN BUFFETT QUALITY SCREENER ({len(df)}) ===")
+        print(df.to_string(index=False) if not df.empty else "No matches today.")
+
+        out_path = os.path.join(args.output_dir, f"buffett_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"buffett_report_{today}.md")
+        df.to_csv(out_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_buffett_markdown_report(df, result["universe_size"], result["checked"]))
+        print(f"\nSaved: {out_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "backtest-decline-reversal":
         result = run_backtest_decline_reversal(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)

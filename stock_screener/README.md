@@ -36,6 +36,30 @@ from the version that was backtested** (2yr, ~482 signals, 36.1% win rate,
 been re-backtested; treat its output as unproven until validated against
 history.
 
+## Screener names
+
+Every mode below has a short name (its `--strategy` value) and a full
+report title (what shows up as the GitHub issue title / markdown heading).
+Quick reference:
+
+| Name (`--strategy`) | Report title |
+|---|---|
+| `bounce` (default) | Stock Screener |
+| `pullback` | Quality Pullback Screener |
+| `support-zone` | Support Zone Screener |
+| `fundamentals` | Fundamentals Check |
+| `levels` | Support Levels |
+| `nifty50-scan` | Nifty 50 Combined Scan |
+| `gap-fill` | Unfilled Gap-Down Screener |
+| `divergence` | Bullish RSI Divergence Screener |
+| `backtest-support-zone` | Support Zone Strategy Backtest |
+| `backtest-support-zone-mtf` | Support Zone Strategy Backtest (Multi-Timeframe + Volume) |
+| `backtest-support-zone-rr` | Support Zone Strategy Backtest (Fixed Risk-Reward) |
+| `bounce-fundamentals` | Bounce + Fundamentals Screener |
+| `decline-reversal` | Decline-Reversal Near Support Screener |
+| `backtest-decline-reversal` | Decline-Reversal Near Support Backtest |
+| `buffett` | Warren Buffett Quality Screener |
+
 ## Quality Pullback strategy (alternative mode)
 
 A second, independent strategy for a different market condition: instead of
@@ -244,6 +268,39 @@ backtests already run.
 python -m stock_screener --strategy backtest-decline-reversal
 ```
 
+## Warren Buffett Quality Screener
+
+The only strategy in this project with **no technical price trigger at
+all** -- a pure business-quality + valuation snapshot, checking every
+non-excluded stock in the universe against seven bars inspired by Warren
+Buffett's own commonly-cited value-investing criteria:
+
+1. **ROE > 15%** -- Buffett's own commonly-cited quality bar.
+2. **Debt/Equity < 50** (exempt for Financial Services) -- stricter than
+   the pullback strategy's <100, since Buffett strongly prefers businesses
+   that don't lean on leverage.
+3. **Both earnings growth AND revenue growth positive** -- stricter than
+   the pullback strategy's either/or; a genuinely growing business, not
+   just "not shrinking."
+4. **Positive free cash flow** -- real cash generation, not just paper
+   profit.
+5. **Profit margin > 10%** -- a rough, computable proxy for pricing power
+   / economic moat. Not a substitute for actually judging whether a moat
+   is real, but at least consistent with one.
+6. **Trailing P/E under 25** -- the commonly-cited "margin of safety"
+   valuation proxy.
+7. **Analyst recommendation not Sell/Underperform.**
+
+All seven must pass. Since there's no technical pre-filter to cheaply
+narrow the field first, every non-excluded ticker in the (now ~350-stock)
+universe needs its own fundamentals lookup -- expect this to take longer
+to run than the technical-gate-first strategies. No backtest exists for
+this combination; it's a research starting point, not a trading signal.
+
+```bash
+python -m stock_screener --strategy buffett
+```
+
 ## Bullish RSI divergence screener
 
 Finds stocks where price made a lower swing low but RSI(14) made a higher (or
@@ -283,6 +340,7 @@ python -m stock_screener --strategy backtest-support-zone-rr  # fixed 2:1 target
 python -m stock_screener --strategy bounce-fundamentals       # bounce event + RSI<45 + volume + fundamentals
 python -m stock_screener --strategy decline-reversal          # 3-day decline + green reversal near support
 python -m stock_screener --strategy backtest-decline-reversal # ~2yr real-data backtest of that rule
+python -m stock_screener --strategy buffett                   # Warren Buffett-style quality/value screener
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
@@ -294,7 +352,8 @@ python -m stock_screener --csv-dir /path/to/csvs
 ```
 
 (expects `ind_nifty50list.csv`, `ind_niftynext50list.csv`,
-`ind_nifty_midcap50list.csv` in that directory)
+`ind_nifty_midcap50list.csv`, `ind_niftymidcap150list.csv`,
+`ind_niftysmallcap100list.csv` in that directory)
 
 Results are printed to the console and saved as
 `output/signals_<date>.csv` / `output/near_miss_<date>.csv`.
