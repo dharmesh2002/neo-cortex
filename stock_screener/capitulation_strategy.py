@@ -6,7 +6,7 @@ price hasn't undercut by much since -- the capitulation candle + a
 stabilization check is a hard gate, not a scored signal, since a ticker
 either had one recently or it didn't.
 
-On top of that gate, seven independent signals are scored 0-7 to judge how
+On top of that gate, eight independent signals are scored 0-8 to judge how
 convincingly selling pressure is fading:
 
 Price action
@@ -19,9 +19,16 @@ Volume
   - Selling volume shrinking -- any down day since the capitulation day has
     less volume than the down day before it (sellers running out; a ticker
     with zero down days since then counts as trivially true -- no renewed
-    selling at all).
+    selling at all). This is a supply-side read: less volume on down days
+    means fewer sellers left, not that anyone's actually buying.
   - Volume absorption -- today's volume is back below its trailing 20-day
     average, i.e. the panic has cooled off from the capitulation spike.
+  - Volume pickup on a rally day -- at least one up day since the
+    capitulation day traded on above-average volume, i.e. real demand
+    showing up (not just a quiet drift higher on thin volume). This is the
+    demand-side counterpart to the two supply-side volume signals above --
+    selling drying up and buying actually showing up are different things,
+    and both are worth seeing.
 
 Indicators
   - RSI(14) bullish divergence at the capitulation low itself: price made a
@@ -34,8 +41,8 @@ Indicators
     lower band on multiple days into the capitulation candle, and hasn't
     closed there since.
 
-capitulation_quality tiers the 0-7 confirming score (strong >=6, moderate
->=4, developing >=2, weak <2); MATCH_SCORE_THRESHOLD/NEAR_MISS_SCORE_THRESHOLD
+capitulation_quality tiers the 0-8 confirming score (strong >=7, moderate
+>=5, developing >=2, weak <2); MATCH_SCORE_THRESHOLD/NEAR_MISS_SCORE_THRESHOLD
 below control what counts as a full match vs. a near-miss watchlist entry.
 This is a new, untested pattern -- no backtest exists for it yet. Not
 investment advice.
@@ -68,7 +75,7 @@ RSI_PERIOD = 14
 
 LIQUIDITY_THRESHOLD_INR = 20 * 1e7   # 20 crore, same liquidity bar used elsewhere in this project
 MIN_HISTORY_ROWS = 120               # room for the anchor lookback + a prior swing low well before it
-MATCH_SCORE_THRESHOLD = 4            # >= this many of 7 confirming signals -> full match
+MATCH_SCORE_THRESHOLD = 4            # >= this many of 8 confirming signals -> full match
 NEAR_MISS_SCORE_THRESHOLD = 2        # >= this many (but below match) -> near-miss watchlist
 
 
@@ -87,6 +94,7 @@ class CapitulationCandidate:
     higher_lows: bool
     selling_volume_shrinking: bool
     volume_absorption: bool
+    volume_pickup_on_rally: bool
     rsi_divergence: bool
     macd_histogram_shrinking: bool
     bb_walk_stopped: bool
@@ -213,6 +221,18 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[CapitulationCandidate]:
     avg_volume_today = avg_volume_prior20.iloc[-1]
     volume_absorption = bool(pd.notna(avg_volume_today) and volume.iloc[-1] < avg_volume_today)
 
+    # -- Volume: real demand showing up -- at least one up day since the
+    # anchor traded on above-average volume, i.e. a genuine volume-backed
+    # rally day rather than a quiet drift higher on thin volume. This is
+    # the demand-side counterpart to selling_volume_shrinking/volume_
+    # absorption above, which only measure supply drying up. --
+    volume_pickup_on_rally = False
+    for i in range(idx + 1, n):
+        if close.iloc[i] > close.iloc[i - 1] and pd.notna(avg_volume_prior20.iloc[i]):
+            if volume.iloc[i] > avg_volume_prior20.iloc[i]:
+                volume_pickup_on_rally = True
+                break
+
     # -- Indicator: RSI higher low vs. the last confirmed swing low before
     # the anchor -- price made a lower low at the capitulation candle than
     # its prior swing low, but RSI didn't. --
@@ -251,13 +271,13 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[CapitulationCandidate]:
     bb_walk_stopped = bool(walked_before and stopped_after)
 
     price_action_score = int(lower_wick_rejection) + int(higher_lows)
-    volume_score = int(selling_volume_shrinking) + int(volume_absorption)
+    volume_score = int(selling_volume_shrinking) + int(volume_absorption) + int(volume_pickup_on_rally)
     indicator_score = int(rsi_divergence) + int(macd_histogram_shrinking) + int(bb_walk_stopped)
     total_score = price_action_score + volume_score + indicator_score
 
-    if total_score >= 6:
+    if total_score >= 7:
         quality = "strong"
-    elif total_score >= 4:
+    elif total_score >= 5:
         quality = "moderate"
     elif total_score >= 2:
         quality = "developing"
@@ -281,6 +301,7 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[CapitulationCandidate]:
         higher_lows=higher_lows,
         selling_volume_shrinking=selling_volume_shrinking,
         volume_absorption=volume_absorption,
+        volume_pickup_on_rally=volume_pickup_on_rally,
         rsi_divergence=rsi_divergence,
         macd_histogram_shrinking=macd_histogram_shrinking,
         bb_walk_stopped=bb_walk_stopped,
@@ -332,6 +353,7 @@ def run_capitulation_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3
             "higher_lows": cand.higher_lows,
             "selling_volume_shrinking": cand.selling_volume_shrinking,
             "volume_absorption": cand.volume_absorption,
+            "volume_pickup_on_rally": cand.volume_pickup_on_rally,
             "rsi_divergence": cand.rsi_divergence,
             "macd_histogram_shrinking": cand.macd_histogram_shrinking,
             "bb_walk_stopped": cand.bb_walk_stopped,

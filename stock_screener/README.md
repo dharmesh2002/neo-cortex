@@ -391,8 +391,8 @@ having closed more than 3% below that candle's own low since (it actually
 candle like this recently or it didn't; this is a hard gate, not a scored
 condition, and nothing without one shows up at all.
 
-On top of the gate, seven independent signals -- grouped the same way this
-pattern is usually talked about -- are scored 0-7 to judge how convincingly
+On top of the gate, eight independent signals -- grouped the same way this
+pattern is usually talked about -- are scored 0-8 to judge how convincingly
 selling pressure is actually fading:
 
 **Price action**
@@ -409,27 +409,32 @@ selling pressure is actually fading:
 3. **Selling volume shrinking** -- every down day since the capitulation
    candle had less volume than the down day before it (a ticker with zero
    down days since then counts as trivially true -- no renewed selling at
-   all to shrink from).
+   all to shrink from). A supply-side read: fewer sellers left, not that
+   anyone's actually buying.
 4. **Volume absorption** -- today's volume is back below its trailing
    20-day average, i.e. the panic has cooled off from the capitulation
    spike (supply getting absorbed without needing a big print to hold the
    level).
+5. **Volume pickup on a rally day** -- at least one up day since the
+   capitulation candle traded on above-average volume -- the demand-side
+   counterpart to the two signals above: real buying interest actually
+   showing up, not just a quiet drift higher on thin volume.
 
 **Indicators**
-5. **RSI(14) bullish divergence at the low** -- price made a lower low at
+6. **RSI(14) bullish divergence at the low** -- price made a lower low at
    the capitulation candle than at the last confirmed swing low before it,
    but RSI didn't -- selling momentum was already fading even at the worst
    print.
-6. **MACD histogram shrinking** -- the histogram is still negative but
+7. **MACD histogram shrinking** -- the histogram is still negative but
    smaller in magnitude over the last 3 days than the 3 days before that --
    bearish momentum fading, not yet flipped positive.
-7. **Lower Bollinger Band walk stopping** -- price was closing at/below the
+8. **Lower Bollinger Band walk stopping** -- price was closing at/below the
    lower band on multiple days into the capitulation candle (a "walk" down
    the band), and hasn't closed there since.
 
-`price_action_score`/`volume_score`/`indicator_score` are out of 2/2/3;
-`total_score` is their sum out of 7, and `capitulation_quality` tiers it:
-strong (>=6), moderate (>=4), developing (>=2). Tickers scoring 4+ are
+`price_action_score`/`volume_score`/`indicator_score` are out of 2/3/3;
+`total_score` is their sum out of 8, and `capitulation_quality` tiers it:
+strong (>=7), moderate (>=5), developing (>=2). Tickers scoring 4+ are
 reported as matches; 2-3 as a near-miss watchlist (same gate, fewer
 confirming signals); below 2 (or no qualifying candle at all) don't appear.
 Only this project's standing liquidity (>= Rs 20cr/day) and sector/industry

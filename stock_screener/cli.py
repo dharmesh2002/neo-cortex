@@ -822,10 +822,10 @@ def _format_capitulation(matches: list) -> pd.DataFrame:
         "ticker", "company", "sector", "industry", "close", "pct_change_today",
         "anchor_date", "days_since_anchor", "anchor_decline_pct", "anchor_volume_multiple",
         "post_anchor_undercut_pct", "lower_wick_rejection", "higher_lows",
-        "selling_volume_shrinking", "volume_absorption", "rsi_divergence",
-        "macd_histogram_shrinking", "bb_walk_stopped", "price_action_score",
-        "volume_score", "indicator_score", "total_score", "capitulation_quality",
-        "avg_daily_value_cr",
+        "selling_volume_shrinking", "volume_absorption", "volume_pickup_on_rally",
+        "rsi_divergence", "macd_histogram_shrinking", "bb_walk_stopped",
+        "price_action_score", "volume_score", "indicator_score", "total_score",
+        "capitulation_quality", "avg_daily_value_cr",
     ]]
     for col in ["close", "pct_change_today", "anchor_decline_pct", "anchor_volume_multiple",
                 "post_anchor_undercut_pct", "avg_daily_value_cr"]:
@@ -852,9 +852,9 @@ def _build_capitulation_markdown_report(matches_df: pd.DataFrame, near_miss_df: 
         "",
         f"## Near-miss watchlist ({len(near_miss_df)})",
         "",
-        "Same capitulation candle + stabilization gate, but fewer of the seven confirming "
+        "Same capitulation candle + stabilization gate, but fewer of the eight confirming "
         f"signals agree (score {CAPITULATION_NEAR_MISS_SCORE_THRESHOLD}-"
-        f"{CAPITULATION_MATCH_SCORE_THRESHOLD - 1} out of 7, instead of "
+        f"{CAPITULATION_MATCH_SCORE_THRESHOLD - 1} out of 8, instead of "
         f"{CAPITULATION_MATCH_SCORE_THRESHOLD}+).",
         "",
     ]
@@ -871,16 +871,19 @@ def _build_capitulation_markdown_report(matches_df: pd.DataFrame, near_miss_df: 
         "stabilized instead of continuing to break down). No candle like this in the last 20 "
         "sessions -- no match, no near-miss, not even scored.",
         "",
-        "**Confirming signals, scored 0-7** (all read-only diagnostics on top of the gate):",
+        "**Confirming signals, scored 0-8** (all read-only diagnostics on top of the gate):",
         "",
         "- Price action: `lower_wick_rejection` (>=2 days since the anchor where the lower wick "
         "was a big share of the day's range and it closed in the upper half -- price probing "
         "lower but buyers stepping in) and `higher_lows` (each confirmed swing-low close since "
         "the anchor is higher than the one before it, starting from the anchor's own close).",
         "- Volume: `selling_volume_shrinking` (every down day since the anchor had less volume "
-        "than the down day before it -- true trivially if there've been no down days at all) "
-        "and `volume_absorption` (today's volume is back below its trailing 20-day average -- "
-        "the panic has cooled).",
+        "than the down day before it -- true trivially if there've been no down days at all -- "
+        "a supply-side read, sellers running out) and `volume_absorption` (today's volume is "
+        "back below its trailing 20-day average -- the panic has cooled), plus "
+        "`volume_pickup_on_rally` (at least one up day since the anchor traded on above-"
+        "average volume -- a demand-side read, real buying interest showing up rather than a "
+        "quiet drift higher on thin volume).",
         "- Indicators: `rsi_divergence` (RSI(14) made a higher low at the anchor candle than at "
         "the last confirmed swing low before it, even though price made a lower low -- selling "
         "momentum was already fading at the worst print), `macd_histogram_shrinking` (MACD "
@@ -888,9 +891,9 @@ def _build_capitulation_markdown_report(matches_df: pd.DataFrame, near_miss_df: 
         "before that), and `bb_walk_stopped` (price was closing at/below the lower Bollinger "
         "Band on multiple days into the anchor candle, and hasn't since).",
         "",
-        "`price_action_score`/`volume_score`/`indicator_score` are out of 2/2/3; "
-        "`total_score` is their sum out of 7, and `capitulation_quality` tiers it: strong "
-        "(>=6), moderate (>=4), developing (>=2), weak (<2 -- excluded entirely, along with "
+        "`price_action_score`/`volume_score`/`indicator_score` are out of 2/3/3; "
+        "`total_score` is their sum out of 8, and `capitulation_quality` tiers it: strong "
+        "(>=7), moderate (>=5), developing (>=2), weak (<2 -- excluded entirely, along with "
         "anything that fails the gate). This is a new, untested pattern -- no backtest exists "
         "for it yet. Not investment advice.",
     ]
@@ -1255,10 +1258,10 @@ def main():
                              "'capitulation': selling-exhaustion screener -- requires a "
                              "capitulation candle (big red candle, >=5%% down on >=2x average "
                              "volume) within the last 20 days that price hasn't undercut since, "
-                             "then scores 7 confirming signals (lower-wick rejections, higher "
-                             "lows, shrinking down-day volume, volume absorption, RSI "
-                             "divergence at the low, shrinking MACD histogram, lower-Bollinger-"
-                             "band walk stopping). "
+                             "then scores 8 confirming signals (lower-wick rejections, higher "
+                             "lows, shrinking down-day volume, volume absorption, volume "
+                             "pickup on a rally day, RSI divergence at the low, shrinking MACD "
+                             "histogram, lower-Bollinger-band walk stopping). "
                              "'structure': pure price-action peak/valley (swing high/low) "
                              "screener -- no indicators at all. Flags reversal_developing "
                              "(peaks still lower-high, but the latest valley just broke the "
