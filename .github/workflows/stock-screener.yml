@@ -38,7 +38,6 @@ on:
           - breadth
           - capitulation
           - structure
-          - debug-structure
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -62,7 +61,6 @@ jobs:
         run: pip install -r stock_screener/requirements.txt
 
       - name: Run screener
-        if: github.event.inputs.strategy != 'debug-structure'
         run: |
           python -m stock_screener \
             --strategy "${{ github.event.inputs.strategy || 'bounce' }}" \
@@ -70,16 +68,8 @@ jobs:
             --tickers "${{ github.event.inputs.tickers || '' }}" \
             --output-dir output
 
-      # Ad-hoc, temporary: dumps the full peak/valley zigzag (+ RSI/volume
-      # context) for an explicit ticker (via the tickers input) to check a
-      # structure classification against the real chart. Remove this step
-      # (and debug_structure.py) once the check is done.
-      - name: Run diagnostic
-        if: github.event.inputs.strategy == 'debug-structure'
-        run: python debug_structure.py "${{ github.event.inputs.tickers || 'JSWSTEEL.NS' }}"
-
       - name: Post results as a GitHub issue
-        if: always() && github.event.inputs.strategy != 'debug-structure'
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STRATEGY: ${{ github.event.inputs.strategy || 'bounce' }}
