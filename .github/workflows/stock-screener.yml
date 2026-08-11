@@ -35,6 +35,7 @@ on:
           - backtest-decline-reversal
           - buffett
           - buffett-relaxed
+          - breadth
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -120,6 +121,9 @@ jobs:
           elif [ "$STRATEGY" = "buffett-relaxed" ]; then
             BODY_FILE="output/buffett_relaxed_report_${DATE}.md"
             TITLE="Warren Buffett Quality Screener (Relaxed) — ${DATE}"
+          elif [ "$STRATEGY" = "breadth" ]; then
+            BODY_FILE="output/breadth_report_${DATE}.md"
+            TITLE="Market Breadth — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"
