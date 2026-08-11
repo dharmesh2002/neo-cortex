@@ -32,6 +32,7 @@ from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_scre
 from .screener import run_screen
 from .support_levels import check_support_levels_for_tickers
 from .support_zone_strategy import run_support_zone_screen
+from .trend_structure_strategy import run_trend_structure_screen
 
 logger = logging.getLogger(__name__)
 
@@ -896,6 +897,84 @@ def _build_capitulation_markdown_report(matches_df: pd.DataFrame, near_miss_df: 
     return "\n".join(lines) + "\n"
 
 
+def _format_trend_structure(rows: list) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df = df[[
+        "ticker", "company", "sector", "industry", "close", "stage",
+        "peak_trend", "valley_trend", "peak_prev", "peak_prev_date",
+        "peak_recent", "peak_recent_date", "valley_prev", "valley_prev_date",
+        "valley_recent", "valley_recent_date", "days_since_last_swing",
+        "pct_from_recent_valley", "avg_daily_value_cr",
+    ]]
+    for col in ["close", "peak_prev", "peak_recent", "valley_prev", "valley_recent",
+                "pct_from_recent_valley", "avg_daily_value_cr"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_trend_structure_markdown_report(matches_df: pd.DataFrame, near_miss_df: pd.DataFrame,
+                                            universe_size: int, history_fetched: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Peak/Valley Trend Structure Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
+        "",
+        f"## Reversal signals ({len(matches_df)})",
+        "",
+    ]
+    if matches_df.empty:
+        lines.append("No matches today.")
+    else:
+        lines.append(matches_df.to_markdown(index=False))
+    lines += [
+        "",
+        f"## Dead-cat bounce watchlist ({len(near_miss_df)})",
+        "",
+        "A valley had turned into a higher low (a bounce attempt) but the very next valley "
+        "broke back down into a lower low while peaks are still making lower highs -- the "
+        "bounce failed and the downtrend has resumed. Not a buy signal; listed as a warning "
+        "and to watch for a fresh higher-low attempt.",
+        "",
+    ]
+    if near_miss_df.empty:
+        lines.append("No dead-cat bounces flagged today.")
+    else:
+        lines.append(near_miss_df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "Pure price-action pattern -- no indicators (no RSI, MACD, Bollinger Bands, volume "
+        "trend). Peaks (swing highs, on the actual daily High) and valleys (swing lows, on "
+        "the actual daily Low) are found with a simple fractal method (a bar is a peak/valley "
+        "if it's the highest/lowest within 3 trading days on each side), merged into a single "
+        "alternating zigzag over time.",
+        "",
+        "**Uptrend** = each peak higher than the last (HH) AND each valley higher than the "
+        "last (HL). **Downtrend** = each peak lower (LH) AND each valley lower (LL). "
+        "**`reversal_developing`** = peaks are still LH, but the most recent valley just broke "
+        "the streak of lower lows and came in higher than the one before it (HL) -- \"the "
+        "moment a stock stops making a lower low,\" the first hint a downtrend is weakening, "
+        "not yet confirmed. **`reversal_confirmed`** = the leg right before this one was still "
+        "LH (a genuine downtrend was in place), the valley in between turned HL, and now the "
+        "newest peak has also pushed above the previous peak (HH) -- both conditions of an "
+        "uptrend are met for the first time.",
+        "",
+        "`peak_prev`/`peak_recent` and `valley_prev`/`valley_recent` are the actual swing "
+        "prices and dates being compared. `days_since_last_swing` is how many trading days "
+        "since the most recent confirmed peak or valley (capped at 15 -- older structure isn't "
+        "reported as \"developing\" right now). `pct_from_recent_valley` shows how far price "
+        "has already moved off the most recent low, i.e. how much of a potential move may "
+        "already be behind it. Swing detection needs 3 trading days of confirmation on each "
+        "side, so the very latest few days can't yet form a confirmed swing point -- this is a "
+        "structural lag inherent to any swing-based method, not a bug. This is a new, "
+        "untested pattern -- no backtest exists for it yet. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _format_backtest_decline_reversal_trades(trades: list) -> pd.DataFrame:
     if not trades:
         return pd.DataFrame()
@@ -1123,7 +1202,7 @@ def main():
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
                                  "bounce-fundamentals", "decline-reversal",
                                  "backtest-decline-reversal", "buffett", "buffett-relaxed",
-                                 "breadth", "capitulation"],
+                                 "breadth", "capitulation", "structure"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -1179,7 +1258,14 @@ def main():
                              "then scores 7 confirming signals (lower-wick rejections, higher "
                              "lows, shrinking down-day volume, volume absorption, RSI "
                              "divergence at the low, shrinking MACD histogram, lower-Bollinger-"
-                             "band walk stopping).")
+                             "band walk stopping). "
+                             "'structure': pure price-action peak/valley (swing high/low) "
+                             "screener -- no indicators at all. Flags reversal_developing "
+                             "(peaks still lower-high, but the latest valley just broke the "
+                             "streak of lower-lows) and reversal_confirmed (that plus the "
+                             "newest peak also pushed above the previous peak), with a "
+                             "dead_cat_bounce watchlist for failed bounce attempts where the "
+                             "downtrend resumed.")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -1315,6 +1401,31 @@ def main():
         near_miss_df.to_csv(near_miss_path, index=False)
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(_build_capitulation_markdown_report(
+                matches_df, near_miss_df, result["universe_size"], result["history_fetched"]))
+        print(f"\nSaved: {matches_path}")
+        print(f"Saved: {near_miss_path}")
+        print(f"Saved: {report_path}")
+        return
+
+    if args.strategy == "structure":
+        result = run_trend_structure_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        matches_df = _format_trend_structure(result["matches"])
+        near_miss_df = _format_trend_structure(result["near_miss"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']})\n")
+        print(f"=== REVERSAL SIGNALS ({len(matches_df)}) ===")
+        print(matches_df.to_string(index=False) if not matches_df.empty else "No matches found.")
+        print(f"\n=== DEAD-CAT BOUNCE WATCHLIST ({len(near_miss_df)}) ===")
+        print(near_miss_df.to_string(index=False) if not near_miss_df.empty else "No dead-cat bounces flagged.")
+
+        matches_path = os.path.join(args.output_dir, f"structure_{today}.csv")
+        near_miss_path = os.path.join(args.output_dir, f"structure_dead_cat_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"structure_report_{today}.md")
+        matches_df.to_csv(matches_path, index=False)
+        near_miss_df.to_csv(near_miss_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_trend_structure_markdown_report(
                 matches_df, near_miss_df, result["universe_size"], result["history_fetched"]))
         print(f"\nSaved: {matches_path}")
         print(f"Saved: {near_miss_path}")

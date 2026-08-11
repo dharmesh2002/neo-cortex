@@ -62,6 +62,7 @@ Quick reference:
 | `buffett-relaxed` | Warren Buffett Quality Screener (Relaxed) |
 | `breadth` | Market Breadth |
 | `capitulation` | Capitulation Screener |
+| `structure` | Peak/Valley Trend Structure Screener |
 
 ## Market Breadth (unfiltered baseline)
 
@@ -441,6 +442,54 @@ output as a starting watchlist for further research, not a trading signal.
 python -m stock_screener --strategy capitulation
 ```
 
+## Peak/Valley Trend Structure screener
+
+The purest screener in this project: no indicators at all -- no RSI, no
+MACD, no Bollinger Bands, no volume. Just peaks (swing highs) and valleys
+(swing lows) on the actual price chart, read the way the classic
+"rising stairs / falling stairs" framework does:
+
+- **Uptrend** -- each peak higher than the last (Higher High) AND each
+  valley higher than the last (Higher Low). Buyers in control.
+- **Downtrend** -- each peak lower than the last (Lower High) AND each
+  valley lower than the last (Lower Low). Sellers in control.
+- **`reversal_developing`** (the signal to watch) -- peaks are still
+  making a Lower High, but the most recent valley just broke the streak
+  of Lower Lows and came in *higher* than the one before it. This is
+  literally "the moment a stock stops making a lower low" -- the first
+  hint a downtrend is weakening, before it's confirmed.
+- **`reversal_confirmed`** -- the leg right before this one was still a
+  Lower High (a genuine downtrend was in place), the valley in between
+  turned into a Higher Low, and now the newest peak has also pushed above
+  the previous peak (Higher High) -- both conditions of an uptrend are
+  now met for the first time.
+- **`dead_cat_bounce`** (a warning, not a buy signal) -- a valley had
+  turned into a Higher Low (a bounce attempt) but the very next valley
+  broke back down into a Lower Low while peaks are still Lower Highs --
+  the bounce failed and the downtrend has resumed. This is the "dead cat"
+  case: a bounce that doesn't hold.
+
+Swing points are found with a simple fractal method on the real daily
+High (for peaks) and Low (for valleys): a bar counts as a peak/valley if
+it's the highest/lowest within 3 trading days on each side, with
+same-type runs merged down to their single most extreme point so peaks
+and valleys strictly alternate over time. Because confirming a swing
+needs 3 days on each side, the very latest few trading days can never yet
+form a confirmed point -- an inherent lag of any swing-based method, not
+a bug. Structure older than 15 trading days isn't reported as
+"developing" right now, to keep results current. Only this project's
+standing liquidity (>= Rs 20cr/day) and sector/industry exclusion rules
+apply on top -- no fundamentals filter.
+
+`reversal_developing` and `reversal_confirmed` are reported as matches
+(ranked confirmed-first); `dead_cat_bounce` gets its own watchlist. This
+is a new, untested pattern -- no backtest exists for it yet. Not a
+substitute for looking at the actual chart.
+
+```bash
+python -m stock_screener --strategy structure
+```
+
 ## Setup
 
 ```bash
@@ -467,6 +516,7 @@ python -m stock_screener --strategy backtest-decline-reversal # ~2yr real-data b
 python -m stock_screener --strategy buffett                   # Warren Buffett-style quality/value screener
 python -m stock_screener --strategy buffett-relaxed            # same bar, P/E<40 + either growth line positive
 python -m stock_screener --strategy capitulation               # selling-climax gate + 7 scored exhaustion signals
+python -m stock_screener --strategy structure                  # pure peak/valley reversal structure, no indicators
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they

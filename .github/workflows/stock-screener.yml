@@ -37,6 +37,7 @@ on:
           - buffett-relaxed
           - breadth
           - capitulation
+          - structure
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -128,6 +129,9 @@ jobs:
           elif [ "$STRATEGY" = "capitulation" ]; then
             BODY_FILE="output/capitulation_report_${DATE}.md"
             TITLE="Capitulation Screener — ${DATE}"
+          elif [ "$STRATEGY" = "structure" ]; then
+            BODY_FILE="output/structure_report_${DATE}.md"
+            TITLE="Peak/Valley Trend Structure Screener — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"
