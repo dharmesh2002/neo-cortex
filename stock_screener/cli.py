@@ -120,9 +120,12 @@ def _format_pullback(matches: list) -> pd.DataFrame:
         "ticker", "company", "sector", "industry", "close", "sma50_support",
         "bb_lower", "bb_mid", "pct_change_today", "roe_pct", "debt_to_equity",
         "earnings_growth_pct", "recommendation", "avg_daily_value_cr",
+        "close_position_pct", "volume_confirmed", "excess_return_pct",
+        "bounce_quality", "tailwind_risk",
     ]]
     for col in ["close", "sma50_support", "bb_lower", "bb_mid", "pct_change_today",
-                "roe_pct", "debt_to_equity", "earnings_growth_pct", "avg_daily_value_cr"]:
+                "roe_pct", "debt_to_equity", "earnings_growth_pct", "avg_daily_value_cr",
+                "close_position_pct", "excess_return_pct"]:
         df[col] = df[col].astype(float).round(2)
     return df
 
@@ -187,6 +190,17 @@ def _build_pullback_markdown_report(matches_df: pd.DataFrame, rejected_df: pd.Da
         "recommendation not Sell/Underperform), on Nifty 50 + Nifty Next 50 + Nifty Midcap 50 + Nifty Midcap 150 + Nifty Smallcap 100. "
         "This is a new, untested strategy -- no backtest exists for it yet. Not investment "
         "advice.",
+        "",
+        "**Bounce-quality columns** (read-only diagnostics, don't affect who makes the "
+        "list): `close_position_pct` is where today's close landed within today's "
+        "high-low range (100% = closed at the day's high, buyers in full control; 0% = "
+        "closed at the low) -- >=65% is counted as a strong close. `volume_confirmed` "
+        "is today's volume vs. its trailing 20-day average. `excess_return_pct` is "
+        "today's % change minus the average % change across the whole screened "
+        "universe today -- positive means the stock is moving on its own strength, "
+        "not just riding a market/sector-wide tailwind (`tailwind_risk` flags the "
+        "opposite). `bounce_quality` tiers by how many of those three agree: "
+        "strong (3/3), moderate (2/3), developing (1/3), weak (0/3).",
     ]
     return "\n".join(lines) + "\n"
 
