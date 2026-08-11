@@ -83,6 +83,29 @@ Run it with `--strategy pullback`. This is a brand-new strategy with **no
 backtest** behind it yet — treat its output as a starting watchlist to
 research further, not a validated signal.
 
+### Reading bounce quality on a match
+
+Every match also carries three read-only diagnostic columns — they don't
+change which stocks make the list, they help judge how convincing a bounce
+off support would be if/when one starts:
+
+- **`close_position_pct`** — where today's close landed in today's
+  high-low range. Close to 100% = closed near the day's high (buyers in
+  control into the close); close to 0% = closed near the low (sellers
+  still in control despite any intraday recovery). ≥65% counts as a
+  strong close.
+- **`volume_confirmed`** — today's volume vs. its trailing 20-day average.
+  A move on below-average volume is a weaker signal than the same move on
+  above-average volume.
+- **`excess_return_pct`** / **`tailwind_risk`** — today's % change minus
+  the average % change across the whole screened universe today. Positive
+  means the stock is moving on its own strength; negative (`tailwind_risk
+  = True`) means it's underperforming the broader tape even if its own
+  candle looks fine — i.e. it's being carried by a market/sector-wide
+  move rather than showing real relative strength.
+- **`bounce_quality`** — tiers the three signals above: `strong` (all
+  three agree), `moderate` (two), `developing` (one), `weak` (none).
+
 ## Support Zone strategy (plain technical scan)
 
 A minimal, literal technical scan with no fundamentals and no extra

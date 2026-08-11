@@ -28,6 +28,16 @@ logger = logging.getLogger(__name__)
 SMA_SUPPORT_WINDOW = 50
 SUPPORT_TOLERANCE_PCT = 0.02  # within 2% of the 50-day SMA
 MAX_RECENT_MOVE_PCT = 3.0  # exclude if yesterday's or today's move exceeds this, either direction
+
+# Bounce-quality scoring: none of these change which stocks pass the
+# technical/fundamentals gates above -- they're read-only diagnostics that
+# answer "if this does turn into a bounce, is it a strong one?" Same three
+# signals used to read a bounce candle elsewhere in this project: how close
+# the candle closed to its high (close-position-in-range), whether volume
+# actually confirmed the move (vs. the trailing 20-day average), and whether
+# the stock is outperforming the rest of the screened universe today rather
+# than just riding a broad market/sector tailwind.
+CLOSE_POSITION_STRONG = 0.65  # (close - low) / (high - low) -- closer to 1.0 = buyers in control
 MIN_ROE = 0.15
 MAX_DEBT_TO_EQUITY = 100.0
 BAD_RECOMMENDATIONS = {"sell", "underperform"}
@@ -58,6 +68,14 @@ class PullbackCandidate:
     in_bb_zone: bool
     quiet: bool
     liquidity_ok: bool
+    close_position_pct: float = 0.5
+    volume_today: float = 0.0
+    avg_volume_prior20: float = 0.0
+    volume_confirmed: bool = False
+    excess_return_pct: float = 0.0
+    rs_condition: bool = False
+    bounce_quality: str = ""
+    tailwind_risk: bool = False
 
     @property
     def technical_ok(self) -> bool:
@@ -67,14 +85,15 @@ class PullbackCandidate:
 def evaluate_pullback_ticker(df: pd.DataFrame) -> Optional[PullbackCandidate]:
     """Cheap, price-only pre-filter -- no network calls. Fundamentals are only
     fetched for tickers that pass this technical gate."""
-    df = df.dropna(subset=["Close", "Volume"])
+    df = df.dropna(subset=["Close", "High", "Low", "Volume"])
     if len(df) < MIN_HISTORY_ROWS:
         return None
 
-    close, volume = df["Close"], df["Volume"]
+    close, high, low, volume = df["Close"], df["High"], df["Low"], df["Volume"]
     sma20, _, lower = bollinger_bands(close, window=BB_WINDOW)
     sma50 = close.rolling(window=SMA_SUPPORT_WINDOW).mean()
     avg_daily_value_20d = (close * volume).rolling(window=20).mean()
+    avg_volume_prior20 = volume.shift(1).rolling(window=20).mean()
 
     if pd.isna(sma50.iloc[-1]) or pd.isna(sma20.iloc[-1]) or pd.isna(lower.iloc[-1]):
         return None
@@ -84,6 +103,8 @@ def evaluate_pullback_ticker(df: pd.DataFrame) -> Optional[PullbackCandidate]:
     close_today = close.iloc[-1]
     close_yday = close.iloc[-2]
     close_2d_ago = close.iloc[-3]
+    high_today = high.iloc[-1]
+    low_today = low.iloc[-1]
 
     pct_change_today = float((close_today / close_yday - 1) * 100) if close_yday else 0.0
     pct_change_yesterday = float((close_yday / close_2d_ago - 1) * 100) if close_2d_ago else 0.0
@@ -95,6 +116,12 @@ def evaluate_pullback_ticker(df: pd.DataFrame) -> Optional[PullbackCandidate]:
         and abs(pct_change_yesterday) <= MAX_RECENT_MOVE_PCT
     )
     liquidity_ok = bool(avg_daily_value_20d.iloc[-1] >= LIQUIDITY_THRESHOLD_INR)
+
+    today_range = high_today - low_today
+    close_position_pct = float((close_today - low_today) / today_range) if today_range > 0 else 0.5
+
+    avg_vol_prior20_today = avg_volume_prior20.iloc[-1]
+    volume_confirmed = bool(not pd.isna(avg_vol_prior20_today) and volume.iloc[-1] > avg_vol_prior20_today)
 
     return PullbackCandidate(
         ticker="",
@@ -109,7 +136,25 @@ def evaluate_pullback_ticker(df: pd.DataFrame) -> Optional[PullbackCandidate]:
         in_bb_zone=in_bb_zone,
         quiet=quiet,
         liquidity_ok=liquidity_ok,
+        close_position_pct=close_position_pct,
+        volume_today=float(volume.iloc[-1]),
+        avg_volume_prior20=float(avg_vol_prior20_today) if not pd.isna(avg_vol_prior20_today) else 0.0,
+        volume_confirmed=volume_confirmed,
     )
+
+
+def score_bounce_quality(close_position_pct: float, volume_confirmed: bool, rs_condition: bool) -> str:
+    """Tier a candidate by how many of the 3 real bounce-quality signals
+    agree: a strong candle close (in the top part of today's range), volume
+    above its trailing 20-day average, and outperformance vs. the rest of
+    the screened universe today (vs. merely riding a market/sector
+    tailwind). Purely informational -- doesn't gate any candidate."""
+    strong_signals = sum([
+        close_position_pct >= CLOSE_POSITION_STRONG,
+        volume_confirmed,
+        rs_condition,
+    ])
+    return {3: "strong", 2: "moderate", 1: "developing", 0: "weak"}[strong_signals]
 
 
 def fetch_fundamentals(ticker: str, sleep_seconds: float = 0.0) -> Dict:
@@ -204,12 +249,32 @@ def run_pullback_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) ->
     history = fetch_price_history(tickers)
     logger.info("Fetched history for %d/%d tickers", len(history), len(tickers))
 
-    technical_candidates: List[PullbackCandidate] = []
+    # Pass 1: evaluate every ticker once, and use the whole universe's
+    # today's % change as the relative-strength benchmark (same two-pass
+    # pattern as the bounce strategy's run_screen).
+    evaluated: Dict[str, PullbackCandidate] = {}
     for ticker, df in history.items():
         result = evaluate_pullback_ticker(df)
         if result is None:
             continue
         result.ticker = ticker
+        evaluated[ticker] = result
+
+    if evaluated:
+        universe_avg_pct_change = sum(r.pct_change_today for r in evaluated.values()) / len(evaluated)
+    else:
+        universe_avg_pct_change = 0.0
+
+    # Pass 2: score bounce quality now that the RS benchmark is known, then
+    # gate on the (unchanged) technical criteria.
+    technical_candidates: List[PullbackCandidate] = []
+    for result in evaluated.values():
+        result.excess_return_pct = result.pct_change_today - universe_avg_pct_change
+        result.rs_condition = result.excess_return_pct > 0
+        result.tailwind_risk = not result.rs_condition
+        result.bounce_quality = score_bounce_quality(
+            result.close_position_pct, result.volume_confirmed, result.rs_condition
+        )
         if result.technical_ok:
             technical_candidates.append(result)
 
@@ -270,6 +335,11 @@ def run_pullback_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) ->
             "earnings_growth_pct": (f["earnings_growth"] * 100) if f["earnings_growth"] is not None else None,
             "recommendation": f["recommendation"],
             "avg_daily_value_cr": cand.avg_daily_value_20d / 1e7,
+            "close_position_pct": cand.close_position_pct * 100,
+            "volume_confirmed": cand.volume_confirmed,
+            "excess_return_pct": cand.excess_return_pct,
+            "bounce_quality": cand.bounce_quality,
+            "tailwind_risk": cand.tailwind_risk,
         })
 
     return {
@@ -278,4 +348,5 @@ def run_pullback_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) ->
         "universe_size": len(tickers),
         "history_fetched": len(history),
         "technical_candidates": len(technical_candidates),
+        "universe_avg_pct_change": universe_avg_pct_change,
     }
