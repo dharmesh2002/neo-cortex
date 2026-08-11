@@ -22,6 +22,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 from .indicators import bollinger_bands
+from .pullback_strategy import score_bounce_quality
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,28 @@ class DeclineReversalCandidate:
     pct_above_support: float
     decline_streak_days: int
     avg_daily_value_20d: float
+    pct_change_today: float = 0.0
+    close_position_pct: float = 0.5
+    volume_confirmed: bool = False
+    excess_return_pct: float = 0.0
+    rs_condition: bool = False
+    reversal_quality: str = ""
+    tailwind_risk: bool = False
+
+
+def _universe_pct_change(df: pd.DataFrame) -> Optional[float]:
+    """Today's plain % change for any ticker with usable price history --
+    deliberately independent of evaluate_ticker's much stricter decline+
+    reversal pattern gate, so the relative-strength benchmark below is
+    computed against the whole screened universe, not just the handful of
+    names that already match the pattern."""
+    close = df["Close"].dropna()
+    if len(close) < 2:
+        return None
+    prev = close.iloc[-2]
+    if not prev:
+        return None
+    return float((close.iloc[-1] / prev - 1) * 100)
 
 
 def evaluate_ticker(df: pd.DataFrame) -> Optional[DeclineReversalCandidate]:
@@ -53,7 +76,7 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[DeclineReversalCandidate]:
     if len(df) < MIN_HISTORY_ROWS:
         return None
 
-    close, open_, low, volume = df["Close"], df["Open"], df["Low"], df["Volume"]
+    close, open_, high, low, volume = df["Close"], df["Open"], df["High"], df["Low"], df["Volume"]
     n = len(df)
     if n < DECLINE_STREAK_DAYS + 2:
         return None
@@ -104,6 +127,21 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[DeclineReversalCandidate]:
     if pct_above_support > NEAR_MISS_TOLERANCE_PCT:
         return None
 
+    # Reversal-quality diagnostics -- same three signals used to score a
+    # bounce in the pullback strategy: how strong today's close was within
+    # its own range, whether volume actually confirmed the reversal, and
+    # (set later, once the universe-wide benchmark is known) whether this
+    # is real relative strength or just a market-wide tailwind.
+    high_today = float(high.iloc[-1])
+    low_today = float(low.iloc[-1])
+    today_range = high_today - low_today
+    close_position_pct = (close_today - low_today) / today_range if today_range > 0 else 0.5
+
+    avg_volume_prior20 = volume.shift(1).rolling(window=20).mean().iloc[-1]
+    volume_confirmed = bool(not pd.isna(avg_volume_prior20) and volume.iloc[-1] > avg_volume_prior20)
+
+    pct_change_today = float((close_today / close_prev - 1) * 100) if close_prev else 0.0
+
     return DeclineReversalCandidate(
         ticker="",
         close=close_today,
@@ -111,6 +149,9 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[DeclineReversalCandidate]:
         prev_close=close_prev,
         nearest_support=nearest_support,
         pct_above_support=pct_above_support,
+        pct_change_today=pct_change_today,
+        close_position_pct=close_position_pct,
+        volume_confirmed=volume_confirmed,
         decline_streak_days=DECLINE_STREAK_DAYS,
         avg_daily_value_20d=float(avg_daily_value_20d),
     )
@@ -127,6 +168,21 @@ def run_decline_reversal_screen(csv_dir: str = None, info_sleep_seconds: float =
     history = fetch_price_history(tickers, period=BACKTEST_PERIOD)
     logger.info("Fetched history for %d/%d tickers", len(history), len(tickers))
 
+    # Pass 1: the relative-strength benchmark is today's average % change
+    # across every ticker with usable price history -- not just the handful
+    # that already match the decline+reversal pattern -- so "beating the
+    # crowd" is measured against the real market, not a tiny biased sample.
+    universe_pct_changes = {}
+    for ticker, df in history.items():
+        pct = _universe_pct_change(df)
+        if pct is not None:
+            universe_pct_changes[ticker] = pct
+    universe_avg_pct_change = (
+        sum(universe_pct_changes.values()) / len(universe_pct_changes) if universe_pct_changes else 0.0
+    )
+
+    # Pass 2: find the decline+reversal candidates and score reversal
+    # quality against that benchmark.
     matches: List[dict] = []
     near_miss: List[dict] = []
     for ticker, df in history.items():
@@ -134,6 +190,14 @@ def run_decline_reversal_screen(csv_dir: str = None, info_sleep_seconds: float =
         if cand is None:
             continue
         cand.ticker = ticker
+
+        pct_today = universe_pct_changes.get(ticker, cand.pct_change_today)
+        cand.excess_return_pct = pct_today - universe_avg_pct_change
+        cand.rs_condition = cand.excess_return_pct > 0
+        cand.tailwind_risk = not cand.rs_condition
+        cand.reversal_quality = score_bounce_quality(
+            cand.close_position_pct, cand.volume_confirmed, cand.rs_condition
+        )
 
         sector_info = fetch_sector_industry(ticker, info_sleep_seconds)
         if is_excluded(sector_info["sector"], sector_info["industry"]):
@@ -151,6 +215,11 @@ def run_decline_reversal_screen(csv_dir: str = None, info_sleep_seconds: float =
             "pct_above_support": cand.pct_above_support,
             "decline_streak_days": cand.decline_streak_days,
             "avg_daily_value_cr": cand.avg_daily_value_20d / 1e7,
+            "close_position_pct": cand.close_position_pct * 100,
+            "volume_confirmed": cand.volume_confirmed,
+            "excess_return_pct": cand.excess_return_pct,
+            "reversal_quality": cand.reversal_quality,
+            "tailwind_risk": cand.tailwind_risk,
         }
 
         if cand.pct_above_support <= SUPPORT_TOLERANCE_PCT:
@@ -166,4 +235,5 @@ def run_decline_reversal_screen(csv_dir: str = None, info_sleep_seconds: float =
         "near_miss": near_miss,
         "universe_size": len(tickers),
         "history_fetched": len(history),
+        "universe_avg_pct_change": universe_avg_pct_change,
     }
