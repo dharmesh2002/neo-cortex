@@ -14,6 +14,11 @@ from .backtest_decline_reversal import run_backtest as run_backtest_decline_reve
 from .backtest_support_zone_rr import run_backtest as run_backtest_rr
 from .bounce_fundamentals_strategy import run_bounce_fundamentals_screen
 from .buffett_strategy import run_buffett_relaxed_screen, run_buffett_screen
+from .capitulation_strategy import (
+    MATCH_SCORE_THRESHOLD as CAPITULATION_MATCH_SCORE_THRESHOLD,
+    NEAR_MISS_SCORE_THRESHOLD as CAPITULATION_NEAR_MISS_SCORE_THRESHOLD,
+    run_capitulation_screen,
+)
 from .decline_reversal_strategy import (
     NEAR_MISS_TOLERANCE_PCT as NEAR_MISS_TOLERANCE_PCT_DR,
     SUPPORT_TOLERANCE_PCT as SUPPORT_TOLERANCE_PCT_DR,
@@ -808,6 +813,89 @@ def _build_decline_reversal_markdown_report(matches_df: pd.DataFrame, near_miss_
     return "\n".join(lines) + "\n"
 
 
+def _format_capitulation(matches: list) -> pd.DataFrame:
+    if not matches:
+        return pd.DataFrame()
+    df = pd.DataFrame(matches)
+    df = df[[
+        "ticker", "company", "sector", "industry", "close", "pct_change_today",
+        "anchor_date", "days_since_anchor", "anchor_decline_pct", "anchor_volume_multiple",
+        "post_anchor_undercut_pct", "lower_wick_rejection", "higher_lows",
+        "selling_volume_shrinking", "volume_absorption", "rsi_divergence",
+        "macd_histogram_shrinking", "bb_walk_stopped", "price_action_score",
+        "volume_score", "indicator_score", "total_score", "capitulation_quality",
+        "avg_daily_value_cr",
+    ]]
+    for col in ["close", "pct_change_today", "anchor_decline_pct", "anchor_volume_multiple",
+                "post_anchor_undercut_pct", "avg_daily_value_cr"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_capitulation_markdown_report(matches_df: pd.DataFrame, near_miss_df: pd.DataFrame,
+                                         universe_size: int, history_fetched: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Capitulation Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
+        "",
+        f"## Matches ({len(matches_df)})",
+        "",
+    ]
+    if matches_df.empty:
+        lines.append("No matches today.")
+    else:
+        lines.append(matches_df.to_markdown(index=False))
+    lines += [
+        "",
+        f"## Near-miss watchlist ({len(near_miss_df)})",
+        "",
+        "Same capitulation candle + stabilization gate, but fewer of the seven confirming "
+        f"signals agree (score {CAPITULATION_NEAR_MISS_SCORE_THRESHOLD}-"
+        f"{CAPITULATION_MATCH_SCORE_THRESHOLD - 1} out of 7, instead of "
+        f"{CAPITULATION_MATCH_SCORE_THRESHOLD}+).",
+        "",
+    ]
+    if near_miss_df.empty:
+        lines.append("No near-misses today.")
+    else:
+        lines.append(near_miss_df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "**The gate (required):** a capitulation candle -- a red candle closing down >=5% on "
+        ">=2x its trailing 20-day average volume -- within the last 20 trading days, with price "
+        "not having closed more than 3% below that candle's own low since (i.e. it actually "
+        "stabilized instead of continuing to break down). No candle like this in the last 20 "
+        "sessions -- no match, no near-miss, not even scored.",
+        "",
+        "**Confirming signals, scored 0-7** (all read-only diagnostics on top of the gate):",
+        "",
+        "- Price action: `lower_wick_rejection` (>=2 days since the anchor where the lower wick "
+        "was a big share of the day's range and it closed in the upper half -- price probing "
+        "lower but buyers stepping in) and `higher_lows` (each confirmed swing-low close since "
+        "the anchor is higher than the one before it, starting from the anchor's own close).",
+        "- Volume: `selling_volume_shrinking` (every down day since the anchor had less volume "
+        "than the down day before it -- true trivially if there've been no down days at all) "
+        "and `volume_absorption` (today's volume is back below its trailing 20-day average -- "
+        "the panic has cooled).",
+        "- Indicators: `rsi_divergence` (RSI(14) made a higher low at the anchor candle than at "
+        "the last confirmed swing low before it, even though price made a lower low -- selling "
+        "momentum was already fading at the worst print), `macd_histogram_shrinking` (MACD "
+        "histogram still negative but smaller in magnitude over the last 3 days vs. the 3 "
+        "before that), and `bb_walk_stopped` (price was closing at/below the lower Bollinger "
+        "Band on multiple days into the anchor candle, and hasn't since).",
+        "",
+        "`price_action_score`/`volume_score`/`indicator_score` are out of 2/2/3; "
+        "`total_score` is their sum out of 7, and `capitulation_quality` tiers it: strong "
+        "(>=6), moderate (>=4), developing (>=2), weak (<2 -- excluded entirely, along with "
+        "anything that fails the gate). This is a new, untested pattern -- no backtest exists "
+        "for it yet. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _format_backtest_decline_reversal_trades(trades: list) -> pd.DataFrame:
     if not trades:
         return pd.DataFrame()
@@ -1035,7 +1123,7 @@ def main():
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
                                  "bounce-fundamentals", "decline-reversal",
                                  "backtest-decline-reversal", "buffett", "buffett-relaxed",
-                                 "breadth"],
+                                 "breadth", "capitulation"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -1084,7 +1172,14 @@ def main():
                              "decliners, average move by market-cap segment and by sector, "
                              "top 10 gainers/losers. No exclusions, no fundamentals gate, no "
                              "technical zone -- the whole-market baseline every other "
-                             "strategy here is measured against.")
+                             "strategy here is measured against. "
+                             "'capitulation': selling-exhaustion screener -- requires a "
+                             "capitulation candle (big red candle, >=5%% down on >=2x average "
+                             "volume) within the last 20 days that price hasn't undercut since, "
+                             "then scores 7 confirming signals (lower-wick rejections, higher "
+                             "lows, shrinking down-day volume, volume absorption, RSI "
+                             "divergence at the low, shrinking MACD histogram, lower-Bollinger-"
+                             "band walk stopping).")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -1198,6 +1293,31 @@ def main():
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(_build_backtest_decline_reversal_markdown_report(result))
         print(f"\nSaved: {trades_path}")
+        print(f"Saved: {report_path}")
+        return
+
+    if args.strategy == "capitulation":
+        result = run_capitulation_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        matches_df = _format_capitulation(result["matches"])
+        near_miss_df = _format_capitulation(result["near_miss"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']})\n")
+        print(f"=== CAPITULATION MATCHES ({len(matches_df)}) ===")
+        print(matches_df.to_string(index=False) if not matches_df.empty else "No matches found.")
+        print(f"\n=== NEAR-MISS WATCHLIST ({len(near_miss_df)}) ===")
+        print(near_miss_df.to_string(index=False) if not near_miss_df.empty else "No near-misses found.")
+
+        matches_path = os.path.join(args.output_dir, f"capitulation_{today}.csv")
+        near_miss_path = os.path.join(args.output_dir, f"capitulation_near_miss_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"capitulation_report_{today}.md")
+        matches_df.to_csv(matches_path, index=False)
+        near_miss_df.to_csv(near_miss_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_capitulation_markdown_report(
+                matches_df, near_miss_df, result["universe_size"], result["history_fetched"]))
+        print(f"\nSaved: {matches_path}")
+        print(f"Saved: {near_miss_path}")
         print(f"Saved: {report_path}")
         return
 

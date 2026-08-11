@@ -61,6 +61,7 @@ Quick reference:
 | `buffett` | Warren Buffett Quality Screener |
 | `buffett-relaxed` | Warren Buffett Quality Screener (Relaxed) |
 | `breadth` | Market Breadth |
+| `capitulation` | Capitulation Screener |
 
 ## Market Breadth (unfiltered baseline)
 
@@ -378,6 +379,68 @@ to produce a reversal, and no backtest exists for this screen.
 python -m stock_screener --strategy divergence
 ```
 
+## Capitulation screener
+
+Looks for the classic "selling climax" sequence rather than any single
+indicator: a **capitulation candle** -- a red candle closing down at least
+5% on at least 2x its trailing 20-day average volume ("sellers throwing
+everything at once") -- within the last 20 trading days, with price not
+having closed more than 3% below that candle's own low since (it actually
+**stabilized** instead of continuing to break down). A ticker either had a
+candle like this recently or it didn't; this is a hard gate, not a scored
+condition, and nothing without one shows up at all.
+
+On top of the gate, seven independent signals -- grouped the same way this
+pattern is usually talked about -- are scored 0-7 to judge how convincingly
+selling pressure is actually fading:
+
+**Price action**
+1. **Lower-wick rejections** -- at least 2 days since the capitulation
+   candle where the lower wick took up a large share of the day's range and
+   it still closed in the upper half (price kept probing lower intraday but
+   buyers defended the level).
+2. **Higher lows forming** -- each confirmed swing-low close since the
+   capitulation candle is higher than the one before it (starting from the
+   candle's own close) -- each dip shallower, even if price is still down
+   overall.
+
+**Volume**
+3. **Selling volume shrinking** -- every down day since the capitulation
+   candle had less volume than the down day before it (a ticker with zero
+   down days since then counts as trivially true -- no renewed selling at
+   all to shrink from).
+4. **Volume absorption** -- today's volume is back below its trailing
+   20-day average, i.e. the panic has cooled off from the capitulation
+   spike (supply getting absorbed without needing a big print to hold the
+   level).
+
+**Indicators**
+5. **RSI(14) bullish divergence at the low** -- price made a lower low at
+   the capitulation candle than at the last confirmed swing low before it,
+   but RSI didn't -- selling momentum was already fading even at the worst
+   print.
+6. **MACD histogram shrinking** -- the histogram is still negative but
+   smaller in magnitude over the last 3 days than the 3 days before that --
+   bearish momentum fading, not yet flipped positive.
+7. **Lower Bollinger Band walk stopping** -- price was closing at/below the
+   lower band on multiple days into the capitulation candle (a "walk" down
+   the band), and hasn't closed there since.
+
+`price_action_score`/`volume_score`/`indicator_score` are out of 2/2/3;
+`total_score` is their sum out of 7, and `capitulation_quality` tiers it:
+strong (>=6), moderate (>=4), developing (>=2). Tickers scoring 4+ are
+reported as matches; 2-3 as a near-miss watchlist (same gate, fewer
+confirming signals); below 2 (or no qualifying candle at all) don't appear.
+Only this project's standing liquidity (>= Rs 20cr/day) and sector/industry
+exclusion rules apply on top -- no fundamentals filter.
+
+This is a new, untested pattern -- no backtest exists for it yet. Treat its
+output as a starting watchlist for further research, not a trading signal.
+
+```bash
+python -m stock_screener --strategy capitulation
+```
+
 ## Setup
 
 ```bash
@@ -403,6 +466,7 @@ python -m stock_screener --strategy decline-reversal          # 3-day decline + 
 python -m stock_screener --strategy backtest-decline-reversal # ~2yr real-data backtest of that rule
 python -m stock_screener --strategy buffett                   # Warren Buffett-style quality/value screener
 python -m stock_screener --strategy buffett-relaxed            # same bar, P/E<40 + either growth line positive
+python -m stock_screener --strategy capitulation               # selling-climax gate + 7 scored exhaustion signals
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they

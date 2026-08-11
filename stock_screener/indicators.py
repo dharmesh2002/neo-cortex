@@ -25,6 +25,17 @@ def rsi(close: pd.Series, period: int = 14) -> pd.Series:
     return rsi_values.where(avg_loss != 0, 100.0)
 
 
+def macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
+    """Standard MACD: fast-EMA minus slow-EMA, its own signal-line EMA, and
+    the histogram (MACD line - signal line)."""
+    ema_fast = close.ewm(span=fast, adjust=False).mean()
+    ema_slow = close.ewm(span=slow, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
+    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+    histogram = macd_line - signal_line
+    return macd_line, signal_line, histogram
+
+
 def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
     """Wilder's Average True Range."""
     prev_close = close.shift(1)
