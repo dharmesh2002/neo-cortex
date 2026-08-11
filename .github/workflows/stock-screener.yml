@@ -37,6 +37,7 @@ on:
           - buffett-relaxed
           - breadth
           - capitulation
+          - debug-crompton
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -60,6 +61,7 @@ jobs:
         run: pip install -r stock_screener/requirements.txt
 
       - name: Run screener
+        if: github.event.inputs.strategy != 'debug-crompton'
         run: |
           python -m stock_screener \
             --strategy "${{ github.event.inputs.strategy || 'bounce' }}" \
@@ -67,8 +69,16 @@ jobs:
             --tickers "${{ github.event.inputs.tickers || '' }}" \
             --output-dir output
 
+      # Ad-hoc, temporary: dumps the raw price/RSI series and swing-low
+      # detection the capitulation screener used for CROMPTON.NS, to check a
+      # rsi_divergence flag against the actual data. Remove this step (and
+      # debug_crompton.py) once the check is done.
+      - name: Run diagnostic
+        if: github.event.inputs.strategy == 'debug-crompton'
+        run: python debug_crompton.py
+
       - name: Post results as a GitHub issue
-        if: always()
+        if: always() && github.event.inputs.strategy != 'debug-crompton'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STRATEGY: ${{ github.event.inputs.strategy || 'bounce' }}
