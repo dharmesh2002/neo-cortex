@@ -41,11 +41,18 @@ MIN_ROE = 0.15
 MAX_DEBT_TO_EQUITY = 50.0
 MIN_PROFIT_MARGIN = 0.10
 MAX_TRAILING_PE = 25.0
+# Relaxed variant: a Buffett-style quality bar (ROE/debt/FCF/margin/analyst
+# unchanged) but with the two dimensions most likely to zero out an entire
+# market on a given day loosened -- valuation ceiling raised from 25x to
+# 40x, and growth relaxed from "both earnings AND revenue must be positive"
+# to "at least one" (matching the pullback strategy's own either/or bar).
+MAX_TRAILING_PE_RELAXED = 40.0
 BAD_RECOMMENDATIONS = {"sell", "underperform"}
 DEBT_CHECK_EXEMPT_SECTORS = {"financial services", "financials"}
 
 
-def _buffett_checks(info: Dict, sector: str = "") -> Dict:
+def _buffett_checks(info: Dict, sector: str = "", max_trailing_pe: float = MAX_TRAILING_PE,
+                     require_both_growth: bool = True) -> Dict:
     roe = info.get("returnOnEquity")
     debt_to_equity = info.get("debtToEquity")
     earnings_growth = info.get("earningsGrowth")
@@ -59,13 +66,12 @@ def _buffett_checks(info: Dict, sector: str = "") -> Dict:
 
     high_roe = bool(roe is not None and roe > MIN_ROE)
     low_debt = debt_check_exempt or bool(debt_to_equity is not None and debt_to_equity < MAX_DEBT_TO_EQUITY)
-    genuinely_growing = bool(
-        earnings_growth is not None and earnings_growth > 0
-        and revenue_growth is not None and revenue_growth > 0
-    )
+    earnings_up = bool(earnings_growth is not None and earnings_growth > 0)
+    revenue_up = bool(revenue_growth is not None and revenue_growth > 0)
+    genuinely_growing = bool(earnings_up and revenue_up) if require_both_growth else bool(earnings_up or revenue_up)
     positive_fcf = bool(free_cash_flow is not None and free_cash_flow > 0)
     healthy_margin = bool(profit_margin is not None and profit_margin > MIN_PROFIT_MARGIN)
-    reasonable_valuation = bool(trailing_pe is not None and 0 < trailing_pe < MAX_TRAILING_PE)
+    reasonable_valuation = bool(trailing_pe is not None and 0 < trailing_pe < max_trailing_pe)
     analyst_backed = bool(recommendation and recommendation not in BAD_RECOMMENDATIONS)
 
     return {
@@ -88,7 +94,9 @@ def _buffett_checks(info: Dict, sector: str = "") -> Dict:
     }
 
 
-def run_buffett_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) -> Dict:
+def run_buffett_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3,
+                        max_trailing_pe: float = MAX_TRAILING_PE,
+                        require_both_growth: bool = True) -> Dict:
     from .universe import build_universe
 
     universe = build_universe(csv_dir=csv_dir)
@@ -105,7 +113,8 @@ def run_buffett_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) -> 
         if is_excluded(sector, industry):
             continue
 
-        c = _buffett_checks(info, sector=sector)
+        c = _buffett_checks(info, sector=sector, max_trailing_pe=max_trailing_pe,
+                             require_both_growth=require_both_growth)
         overall_ok = bool(
             c["high_roe"] and c["low_debt"] and c["genuinely_growing"]
             and c["positive_fcf"] and c["healthy_margin"] and c["reasonable_valuation"]
@@ -136,4 +145,21 @@ def run_buffett_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) -> 
         "matches": matches,
         "universe_size": len(tickers),
         "checked": checked,
+        "max_trailing_pe": max_trailing_pe,
+        "require_both_growth": require_both_growth,
     }
+
+
+def run_buffett_relaxed_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) -> Dict:
+    """Same seven-check Buffett-style bar, but with the valuation ceiling
+    raised (25x -> 40x trailing P/E) and growth relaxed to either earnings
+    OR revenue positive (matching the pullback strategy's own bar) instead
+    of requiring both -- the two dimensions most likely to zero out an
+    entire market's worth of candidates on a given day. ROE, debt, free
+    cash flow, margin, and analyst-rating bars are unchanged."""
+    return run_buffett_screen(
+        csv_dir=csv_dir,
+        info_sleep_seconds=info_sleep_seconds,
+        max_trailing_pe=MAX_TRAILING_PE_RELAXED,
+        require_both_growth=False,
+    )
