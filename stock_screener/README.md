@@ -60,6 +60,19 @@ Quick reference:
 | `backtest-decline-reversal` | Decline-Reversal Near Support Backtest |
 | `buffett` | Warren Buffett Quality Screener |
 | `buffett-relaxed` | Warren Buffett Quality Screener (Relaxed) |
+| `breadth` | Market Breadth |
+
+## Market Breadth (unfiltered baseline)
+
+Every strategy above narrows the universe to a specific technical/fundamentals setup.
+`breadth` deliberately does the opposite: no sector exclusions, no fundamentals gate, no
+technical zone -- just advancers vs. decliners, average move by market-cap segment (Nifty
+50 / Next 50 / Midcap 50 / Midcap 150 / Smallcap 100) and by Yahoo Finance sector, plus the
+day's top 10 gainers and losers across the whole universe. Use it to answer "is today's
+market actually moving, and where" independent of what any single screener is filtered to
+show. Slower than most strategies here since it fetches sector data for every ticker with
+price history, not just names that already passed another filter. Run it with `--strategy
+breadth`.
 
 ## Quality Pullback strategy (alternative mode)
 

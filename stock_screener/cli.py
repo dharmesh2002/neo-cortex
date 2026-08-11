@@ -21,6 +21,7 @@ from .decline_reversal_strategy import (
 )
 from .divergence_strategy import run_divergence_screen
 from .gap_fill_strategy import run_gap_fill_screen
+from .market_breadth import run_market_breadth
 from .nifty50_scan import run_nifty50_scan
 from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_screen
 from .screener import run_screen
@@ -927,6 +928,88 @@ def _build_buffett_relaxed_markdown_report(df: pd.DataFrame, universe_size: int,
     return "\n".join(lines) + "\n"
 
 
+def _format_breadth_table(stats_list: list, name_key: str) -> pd.DataFrame:
+    if not stats_list:
+        return pd.DataFrame()
+    df = pd.DataFrame(stats_list)
+    df = df[[name_key, "count", "advancers", "decliners", "unchanged", "avg_pct_change"]]
+    df["avg_pct_change"] = df["avg_pct_change"].astype(float).round(3)
+    return df
+
+
+def _format_movers(rows: list) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df = df[["ticker", "company", "segment", "sector", "pct_change_today"]]
+    df["pct_change_today"] = df["pct_change_today"].astype(float).round(2)
+    return df
+
+
+def _build_market_breadth_markdown_report(result: dict) -> str:
+    today = date.today().isoformat()
+    o = result["overall"]
+    segment_df = _format_breadth_table(result["segment_breadth"], "segment")
+    sector_df = _format_breadth_table(result["sector_breadth"], "sector")
+    gainers_df = _format_movers(result["top_gainers"])
+    losers_df = _format_movers(result["top_losers"])
+
+    lines = [
+        f"# Market Breadth — {today}",
+        "",
+        f"Universe: {result['universe_size']} tickers (price history fetched for "
+        f"{result['history_fetched']}). Unfiltered -- no sector exclusions, no fundamentals "
+        "gate, no technical zone. Every strategy in this project narrows to a specific setup; "
+        "this one is the whole-market baseline they're all measured against.",
+        "",
+        "## Overall",
+        "",
+        f"- **Advancers**: {o['advancers']} &nbsp; **Decliners**: {o['decliners']} &nbsp; "
+        f"**Unchanged**: {o['unchanged']} (of {o['count']})",
+        f"- **Universe average move**: {o['avg_pct_change']:+.3f}%",
+        "",
+        "## By market-cap segment",
+        "",
+    ]
+    if segment_df.empty:
+        lines.append("No data.")
+    else:
+        lines.append(segment_df.to_markdown(index=False))
+    lines += [
+        "",
+        "## By sector",
+        "",
+    ]
+    if sector_df.empty:
+        lines.append("No data.")
+    else:
+        lines.append(sector_df.to_markdown(index=False))
+    lines += [
+        "",
+        "## Top 10 gainers",
+        "",
+    ]
+    lines.append(gainers_df.to_markdown(index=False) if not gainers_df.empty else "No data.")
+    lines += [
+        "",
+        "## Top 10 losers",
+        "",
+    ]
+    lines.append(losers_df.to_markdown(index=False) if not losers_df.empty else "No data.")
+    lines += [
+        "",
+        "---",
+        "`avg_pct_change` is the simple average of each stock's today-vs-yesterday close "
+        "change within that group (not cap-weighted, so a handful of small/illiquid names "
+        "moving hard can skew a segment or sector's average more than they'd move a real "
+        "cap-weighted index). Sector comes from Yahoo Finance's classification and is fetched "
+        "for every ticker with usable price history, unlike every other strategy here which "
+        "only fetches it for names that already passed a technical/fundamentals filter -- this "
+        "run is slower for that reason. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
@@ -937,7 +1020,8 @@ def main():
                                  "nifty50-scan", "gap-fill", "divergence", "backtest-support-zone",
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
                                  "bounce-fundamentals", "decline-reversal",
-                                 "backtest-decline-reversal", "buffett", "buffett-relaxed"],
+                                 "backtest-decline-reversal", "buffett", "buffett-relaxed",
+                                 "breadth"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -981,7 +1065,12 @@ def main():
                              "cash flow, profit margin>10%, trailing P/E<25, analyst not-Sell. "
                              "No technical trigger at all, pure business quality + valuation. "
                              "'buffett-relaxed': same bar with P/E ceiling raised to 40x and "
-                             "growth relaxed to either earnings OR revenue positive.")
+                             "growth relaxed to either earnings OR revenue positive. "
+                             "'breadth': unfiltered market-breadth snapshot -- advancers vs. "
+                             "decliners, average move by market-cap segment and by sector, "
+                             "top 10 gainers/losers. No exclusions, no fundamentals gate, no "
+                             "technical zone -- the whole-market baseline every other "
+                             "strategy here is measured against.")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -1005,6 +1094,41 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "breadth":
+        result = run_market_breadth(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        o = result["overall"]
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']})\n")
+        print(f"=== MARKET BREADTH === advancers={o['advancers']} decliners={o['decliners']} "
+              f"unchanged={o['unchanged']} avg_move={o['avg_pct_change']:+.3f}%")
+
+        segment_df = _format_breadth_table(result["segment_breadth"], "segment")
+        sector_df = _format_breadth_table(result["sector_breadth"], "sector")
+        gainers_df = _format_movers(result["top_gainers"])
+        losers_df = _format_movers(result["top_losers"])
+
+        print("\n=== BY SEGMENT ===")
+        print(segment_df.to_string(index=False) if not segment_df.empty else "No data.")
+        print("\n=== BY SECTOR ===")
+        print(sector_df.to_string(index=False) if not sector_df.empty else "No data.")
+        print("\n=== TOP GAINERS ===")
+        print(gainers_df.to_string(index=False) if not gainers_df.empty else "No data.")
+        print("\n=== TOP LOSERS ===")
+        print(losers_df.to_string(index=False) if not losers_df.empty else "No data.")
+
+        segment_path = os.path.join(args.output_dir, f"breadth_segment_{today}.csv")
+        sector_path = os.path.join(args.output_dir, f"breadth_sector_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"breadth_report_{today}.md")
+        segment_df.to_csv(segment_path, index=False)
+        sector_df.to_csv(sector_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_market_breadth_markdown_report(result))
+        print(f"\nSaved: {segment_path}")
+        print(f"Saved: {sector_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "buffett-relaxed":
         result = run_buffett_relaxed_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
