@@ -59,6 +59,7 @@ Quick reference:
 | `decline-reversal` | Decline-Reversal Near Support Screener |
 | `backtest-decline-reversal` | Decline-Reversal Near Support Backtest |
 | `buffett` | Warren Buffett Quality Screener |
+| `buffett-relaxed` | Warren Buffett Quality Screener (Relaxed) |
 
 ## Quality Pullback strategy (alternative mode)
 
@@ -301,6 +302,20 @@ this combination; it's a research starting point, not a trading signal.
 python -m stock_screener --strategy buffett
 ```
 
+**Relaxed variant**: the strict version above can plausibly return zero
+matches on any given day -- a P/E under 25 with both earnings and revenue
+growing at once is a genuinely rare combination, and returning nothing is
+a real, meaningful result (it says something about the market, not a bug).
+`--strategy buffett-relaxed` keeps the ROE, debt, free cash flow, margin,
+and analyst-rating bars unchanged but raises the P/E ceiling to 40x and
+relaxes growth to *either* earnings or revenue positive (matching the
+pullback strategy's own either/or bar), to see what shows up once the two
+strictest, most-likely-to-zero-out dimensions are loosened.
+
+```bash
+python -m stock_screener --strategy buffett-relaxed
+```
+
 ## Bullish RSI divergence screener
 
 Finds stocks where price made a lower swing low but RSI(14) made a higher (or
@@ -341,6 +356,7 @@ python -m stock_screener --strategy bounce-fundamentals       # bounce event + R
 python -m stock_screener --strategy decline-reversal          # 3-day decline + green reversal near support
 python -m stock_screener --strategy backtest-decline-reversal # ~2yr real-data backtest of that rule
 python -m stock_screener --strategy buffett                   # Warren Buffett-style quality/value screener
+python -m stock_screener --strategy buffett-relaxed            # same bar, P/E<40 + either growth line positive
 ```
 
 Index constituent lists are always pulled fresh from niftyindices.com (they
