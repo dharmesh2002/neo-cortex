@@ -9,7 +9,7 @@ from stock_screener.capitulation_strategy import (
 )
 from stock_screener.indicators import rsi
 
-history = fetch_price_history(["CROMPTON.NS"])
+history = fetch_price_history(["CROMPTON.NS", "RELIANCE.NS"])
 df = history["CROMPTON.NS"].dropna(subset=["Close", "Open", "High", "Low", "Volume"])
 close, open_, volume = df["Close"], df["Open"], df["Volume"]
 
