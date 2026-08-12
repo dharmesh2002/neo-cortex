@@ -38,7 +38,6 @@ on:
           - breadth
           - capitulation
           - structure
-          - debug-consolidated
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -62,7 +61,6 @@ jobs:
         run: pip install -r stock_screener/requirements.txt
 
       - name: Run screener
-        if: github.event.inputs.strategy != 'debug-consolidated'
         run: |
           python -m stock_screener \
             --strategy "${{ github.event.inputs.strategy || 'bounce' }}" \
@@ -70,15 +68,8 @@ jobs:
             --tickers "${{ github.event.inputs.tickers || '' }}" \
             --output-dir output
 
-      # Ad-hoc, temporary: reports mid-Bollinger-Band position for an
-      # explicit ticker list (via the tickers input). Remove this step
-      # (and debug_consolidated.py) once done.
-      - name: Run diagnostic
-        if: github.event.inputs.strategy == 'debug-consolidated'
-        run: python debug_consolidated.py "${{ github.event.inputs.tickers }}"
-
       - name: Post results as a GitHub issue
-        if: always() && github.event.inputs.strategy != 'debug-consolidated'
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STRATEGY: ${{ github.event.inputs.strategy || 'bounce' }}
