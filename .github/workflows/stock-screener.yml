@@ -38,7 +38,6 @@ on:
           - breadth
           - capitulation
           - structure
-          - debug-score-all
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -62,7 +61,6 @@ jobs:
         run: pip install -r stock_screener/requirements.txt
 
       - name: Run screener
-        if: github.event.inputs.strategy != 'debug-score-all'
         run: |
           python -m stock_screener \
             --strategy "${{ github.event.inputs.strategy || 'bounce' }}" \
@@ -70,16 +68,8 @@ jobs:
             --tickers "${{ github.event.inputs.tickers || '' }}" \
             --output-dir output
 
-      # Ad-hoc, temporary: runs the capitulation screener's scoring against
-      # an explicit ticker list (via the tickers input), showing every
-      # ticker's real score including ones with no qualifying candle at
-      # all. Remove this step (and debug_score_all.py) once done.
-      - name: Run diagnostic
-        if: github.event.inputs.strategy == 'debug-score-all'
-        run: python debug_score_all.py "${{ github.event.inputs.tickers }}"
-
       - name: Post results as a GitHub issue
-        if: always() && github.event.inputs.strategy != 'debug-score-all'
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STRATEGY: ${{ github.event.inputs.strategy || 'bounce' }}
