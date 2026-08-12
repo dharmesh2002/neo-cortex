@@ -25,6 +25,14 @@ the highest High within a window of trading days on each side, a valley if
 it's the lowest Low, with same-type runs merged down to their single most
 extreme point so peaks and valleys strictly alternate in time.
 
+Recent fact, not just historical: `stage` is computed from swing history,
+which is a snapshot from whenever the most recent valley was confirmed --
+it doesn't update just because price has moved since. `valley_intact` /
+`pct_from_recent_valley` report today's close against that confirming
+valley directly, so a reversal_developing/reversal_confirmed row that has
+since fallen back below its own higher low is visible as such, instead of
+still reading as a clean signal after the fact.
+
 This is a new, untested pattern -- no backtest exists for it yet. Not
 investment advice.
 """
@@ -62,6 +70,7 @@ class StructureCandidate:
     valley_recent_date: str
     days_since_last_swing: int
     pct_from_recent_valley: float
+    valley_intact: bool
     avg_daily_value_20d: float
 
 
@@ -184,10 +193,17 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[StructureCandidate]:
     if days_since_last_swing > RECENCY_MAX_DAYS:
         return None
 
+    # Recent fact, not just historical: reversal_developing/reversal_confirmed
+    # are both defined by the most recent valley being a higher low -- but
+    # that's a snapshot from whenever that valley was confirmed. If price has
+    # since fallen back below it, the higher low that made this a reversal in
+    # the first place no longer holds, even though the stage label (computed
+    # from swing history) hasn't changed yet.
     close_today = float(close.iloc[-1])
     pct_from_recent_valley = (
         (close_today - v_recent_price) / v_recent_price * 100 if v_recent_price else 0.0
     )
+    valley_intact = close_today >= v_recent_price
 
     return StructureCandidate(
         ticker="",
@@ -201,6 +217,7 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[StructureCandidate]:
         valley_recent=v_recent_price, valley_recent_date=str(df.index[v_recent_idx].date()),
         days_since_last_swing=days_since_last_swing,
         pct_from_recent_valley=pct_from_recent_valley,
+        valley_intact=valley_intact,
         avg_daily_value_20d=float(avg_daily_value_20d),
     )
 
@@ -247,6 +264,7 @@ def run_trend_structure_screen(csv_dir: str = None, info_sleep_seconds: float = 
             "valley_recent_date": cand.valley_recent_date,
             "days_since_last_swing": cand.days_since_last_swing,
             "pct_from_recent_valley": cand.pct_from_recent_valley,
+            "valley_intact": cand.valley_intact,
             "avg_daily_value_cr": cand.avg_daily_value_20d / 1e7,
         }
 

@@ -440,6 +440,15 @@ confirming signals); below 2 (or no qualifying candle at all) don't appear.
 Only this project's standing liquidity (>= Rs 20cr/day) and sector/industry
 exclusion rules apply on top -- no fundamentals filter.
 
+**Recent fact, not just historical:** all eight signals above check
+whether something happened at some point since the anchor, not whether
+it's still true today -- a stock can score points for a rally days ago
+that's since partly reversed. `post_anchor_high` / `pct_off_post_anchor_
+high` / `days_since_post_anchor_high` report the best close since the
+anchor, how far today sits below it, and how long ago that peak was, so
+every row shows both "this confirmed" and "here's where it stands right
+now" together, instead of needing a follow-up check.
+
 This is a new, untested pattern -- no backtest exists for it yet. Treat its
 output as a starting watchlist for further research, not a trading signal.
 
@@ -487,8 +496,19 @@ standing liquidity (>= Rs 20cr/day) and sector/industry exclusion rules
 apply on top -- no fundamentals filter.
 
 `reversal_developing` and `reversal_confirmed` are reported as matches
-(ranked confirmed-first); `dead_cat_bounce` gets its own watchlist. This
-is a new, untested pattern -- no backtest exists for it yet. Not a
+(ranked confirmed-first); `dead_cat_bounce` gets its own watchlist.
+
+**Recent fact, not just historical:** `stage` is computed from swing
+history -- a snapshot from whenever the most recent valley was confirmed.
+It does not update just because price has moved since. `pct_from_recent_
+valley` / `valley_intact` check today's close against that confirming
+valley directly: negative / False means price has since fallen back below
+its own higher low, so the level that made this a reversal no longer
+holds, even though `stage` still reads as a clean signal. Always check
+this before treating a match as fresh -- it's what would have caught
+GODREJPROP being retested right after it confirmed.
+
+This is a new, untested pattern -- no backtest exists for it yet. Not a
 substitute for looking at the actual chart.
 
 ```bash

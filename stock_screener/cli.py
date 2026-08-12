@@ -821,14 +821,16 @@ def _format_capitulation(matches: list) -> pd.DataFrame:
     df = df[[
         "ticker", "company", "sector", "industry", "close", "pct_change_today",
         "anchor_date", "days_since_anchor", "anchor_decline_pct", "anchor_volume_multiple",
-        "post_anchor_undercut_pct", "lower_wick_rejection", "higher_lows",
+        "post_anchor_undercut_pct", "post_anchor_high", "pct_off_post_anchor_high",
+        "days_since_post_anchor_high", "lower_wick_rejection", "higher_lows",
         "selling_volume_shrinking", "volume_absorption", "volume_pickup_on_rally",
         "rsi_divergence", "macd_histogram_shrinking", "bb_walk_stopped",
         "price_action_score", "volume_score", "indicator_score", "total_score",
         "capitulation_quality", "avg_daily_value_cr",
     ]]
     for col in ["close", "pct_change_today", "anchor_decline_pct", "anchor_volume_multiple",
-                "post_anchor_undercut_pct", "avg_daily_value_cr"]:
+                "post_anchor_undercut_pct", "post_anchor_high", "pct_off_post_anchor_high",
+                "avg_daily_value_cr"]:
         df[col] = df[col].astype(float).round(2)
     return df
 
@@ -894,8 +896,17 @@ def _build_capitulation_markdown_report(matches_df: pd.DataFrame, near_miss_df: 
         "`price_action_score`/`volume_score`/`indicator_score` are out of 2/3/3; "
         "`total_score` is their sum out of 8, and `capitulation_quality` tiers it: strong "
         "(>=7), moderate (>=5), developing (>=2), weak (<2 -- excluded entirely, along with "
-        "anything that fails the gate). This is a new, untested pattern -- no backtest exists "
-        "for it yet. Not investment advice.",
+        "anything that fails the gate).",
+        "",
+        "**Recent fact, not just historical:** all eight signals above check whether "
+        "something happened at some point since the anchor -- not whether it's still true "
+        "today. `post_anchor_high` is the best close since the anchor; "
+        "`pct_off_post_anchor_high` is how far today's close sits below that peak (0% = "
+        "sitting at its post-sell-off high right now; a large negative number means it's "
+        "given back a real chunk of the move); `days_since_post_anchor_high` is how long "
+        "ago that peak was. A row can score well on history and still be actively pulling "
+        "back right now -- check this before treating any match as fresh. This is a new, "
+        "untested pattern -- no backtest exists for it yet. Not investment advice.",
     ]
     return "\n".join(lines) + "\n"
 
@@ -909,7 +920,7 @@ def _format_trend_structure(rows: list) -> pd.DataFrame:
         "peak_trend", "valley_trend", "peak_prev", "peak_prev_date",
         "peak_recent", "peak_recent_date", "valley_prev", "valley_prev_date",
         "valley_recent", "valley_recent_date", "days_since_last_swing",
-        "pct_from_recent_valley", "avg_daily_value_cr",
+        "pct_from_recent_valley", "valley_intact", "avg_daily_value_cr",
     ]]
     for col in ["close", "peak_prev", "peak_recent", "valley_prev", "valley_recent",
                 "pct_from_recent_valley", "avg_daily_value_cr"]:
@@ -968,12 +979,20 @@ def _build_trend_structure_markdown_report(matches_df: pd.DataFrame, near_miss_d
         "`peak_prev`/`peak_recent` and `valley_prev`/`valley_recent` are the actual swing "
         "prices and dates being compared. `days_since_last_swing` is how many trading days "
         "since the most recent confirmed peak or valley (capped at 15 -- older structure isn't "
-        "reported as \"developing\" right now). `pct_from_recent_valley` shows how far price "
-        "has already moved off the most recent low, i.e. how much of a potential move may "
-        "already be behind it. Swing detection needs 3 trading days of confirmation on each "
-        "side, so the very latest few days can't yet form a confirmed swing point -- this is a "
-        "structural lag inherent to any swing-based method, not a bug. This is a new, "
-        "untested pattern -- no backtest exists for it yet. Not investment advice.",
+        "reported as \"developing\" right now). Swing detection needs 3 trading days of "
+        "confirmation on each side, so the very latest few days can't yet form a confirmed "
+        "swing point -- a structural lag inherent to any swing-based method, not a bug.",
+        "",
+        "**Recent fact, not just historical:** `stage` is computed from swing history, a "
+        "snapshot from whenever the most recent valley was confirmed -- it does not update "
+        "just because price has moved since. `pct_from_recent_valley` is today's close vs. "
+        "that confirming valley directly: positive means price is still above it (the higher "
+        "low that made this a reversal is holding); negative means price has since fallen "
+        "back below its own higher low -- the level that defined the reversal is broken, even "
+        "though the `stage` label hasn't caught up yet. `valley_intact` is the same check as a "
+        "plain True/False. Always check this before treating a reversal_developing/"
+        "reversal_confirmed row as still fresh. This is a new, untested pattern -- no backtest "
+        "exists for it yet. Not investment advice.",
     ]
     return "\n".join(lines) + "\n"
 

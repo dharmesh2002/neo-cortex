@@ -44,6 +44,17 @@ Indicators
 capitulation_quality tiers the 0-8 confirming score (strong >=7, moderate
 >=5, developing >=2, weak <2); MATCH_SCORE_THRESHOLD/NEAR_MISS_SCORE_THRESHOLD
 below control what counts as a full match vs. a near-miss watchlist entry.
+
+Every one of the eight signals above is a historical check -- "did this
+happen at some point since the anchor" -- which says nothing about whether
+it's still true today. A stock can score points for a rally that has since
+partly reversed. To make that visible without a follow-up check every time,
+every candidate also reports post_anchor_high / pct_off_post_anchor_high /
+days_since_post_anchor_high: the best close since the anchor, how far
+today's close sits below it, and how long ago that peak was -- so a report
+row shows both "this confirmed" and "here's where it stands right now" in
+the same place.
+
 This is a new, untested pattern -- no backtest exists for it yet. Not
 investment advice.
 """
@@ -89,6 +100,9 @@ class CapitulationCandidate:
     anchor_decline_pct: float
     anchor_volume_multiple: float
     post_anchor_undercut_pct: float
+    post_anchor_high: float
+    pct_off_post_anchor_high: float
+    days_since_post_anchor_high: int
     lower_wick_rejection: bool
     wick_rejection_days: int
     higher_lows: bool
@@ -183,6 +197,18 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[CapitulationCandidate]:
         return None
 
     days_since_anchor = (n - 1) - idx
+
+    # -- Recent fact, not just historical: how far has price pulled back
+    # from its best close since the anchor? A confirming signal (like
+    # volume_pickup_on_rally below) can be true from a rally days ago even
+    # while the stock is actively giving that rally back right now -- this
+    # makes that visible in every report instead of requiring a follow-up
+    # check. --
+    post_anchor_closes = close.iloc[idx + 1:]
+    post_anchor_high = float(post_anchor_closes.max())
+    post_anchor_high_idx = idx + 1 + int(post_anchor_closes.values.argmax())
+    pct_off_post_anchor_high = (float(close.iloc[-1]) - post_anchor_high) / post_anchor_high * 100
+    days_since_post_anchor_high = (n - 1) - post_anchor_high_idx
 
     # -- Price action: lower-wick rejections since the anchor --
     wick_days = 0
@@ -296,6 +322,9 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[CapitulationCandidate]:
         anchor_decline_pct=anchor_decline_pct,
         anchor_volume_multiple=anchor_volume_multiple,
         post_anchor_undercut_pct=post_anchor_undercut_pct,
+        post_anchor_high=post_anchor_high,
+        pct_off_post_anchor_high=pct_off_post_anchor_high,
+        days_since_post_anchor_high=days_since_post_anchor_high,
         lower_wick_rejection=lower_wick_rejection,
         wick_rejection_days=wick_days,
         higher_lows=higher_lows,
@@ -349,6 +378,9 @@ def run_capitulation_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3
             "anchor_decline_pct": cand.anchor_decline_pct,
             "anchor_volume_multiple": cand.anchor_volume_multiple,
             "post_anchor_undercut_pct": cand.post_anchor_undercut_pct,
+            "post_anchor_high": cand.post_anchor_high,
+            "pct_off_post_anchor_high": cand.pct_off_post_anchor_high,
+            "days_since_post_anchor_high": cand.days_since_post_anchor_high,
             "lower_wick_rejection": cand.lower_wick_rejection,
             "higher_lows": cand.higher_lows,
             "selling_volume_shrinking": cand.selling_volume_shrinking,
