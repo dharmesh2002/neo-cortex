@@ -38,6 +38,7 @@ on:
           - breadth
           - capitulation
           - structure
+          - debug-bb-turnup
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -61,6 +62,7 @@ jobs:
         run: pip install -r stock_screener/requirements.txt
 
       - name: Run screener
+        if: github.event.inputs.strategy != 'debug-bb-turnup'
         run: |
           python -m stock_screener \
             --strategy "${{ github.event.inputs.strategy || 'bounce' }}" \
@@ -68,8 +70,15 @@ jobs:
             --tickers "${{ github.event.inputs.tickers || '' }}" \
             --output-dir output
 
+      # Ad-hoc, temporary: stocks below the lower Bollinger Band but up
+      # today (earliest possible bounce sign). Remove this step (and
+      # debug_bb_turnup.py) once done.
+      - name: Run diagnostic
+        if: github.event.inputs.strategy == 'debug-bb-turnup'
+        run: python debug_bb_turnup.py
+
       - name: Post results as a GitHub issue
-        if: always()
+        if: always() && github.event.inputs.strategy != 'debug-bb-turnup'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STRATEGY: ${{ github.event.inputs.strategy || 'bounce' }}
