@@ -73,7 +73,8 @@ def _build_indicators(df: pd.DataFrame):
     return upper, lower, rsi_s, atr_s, avg_vol20, avg_val20
 
 
-def run_backtest_bounce(csv_dir: str = None, period: str = BACKTEST_PERIOD) -> Dict:
+def run_backtest_bounce(csv_dir: str = None, period: str = BACKTEST_PERIOD,
+                        rsi_floor: float = None) -> Dict:
     import time as _time
 
     universe = build_universe(csv_dir=csv_dir)
@@ -171,7 +172,8 @@ def run_backtest_bounce(csv_dir: str = None, period: str = BACKTEST_PERIOD) -> D
 
             bb_cond = (low_today <= lower_today and close_today > lower_today
                        and close_today > close_prev)
-            rsi_cond = rsi_today > rsi_prev
+            rsi_cond = (rsi_today > rsi_prev
+                        and (rsi_floor is None or rsi_today < rsi_floor))
             vol_cond = vol_today > avg_vol
 
             # Relative strength: stock's pct change vs universe average that day

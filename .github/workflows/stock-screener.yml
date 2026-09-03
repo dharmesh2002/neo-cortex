@@ -40,6 +40,7 @@ on:
           - bb-breakout
           - backtest-bb-buy
           - backtest-bounce
+          - backtest-bounce-rsi45
       nifty100:
         description: "Restrict bb-buy / bb-breakout / backtest-bb-buy to Nifty 100 only (Nifty 50 + Next 50)"
         required: false
@@ -153,6 +154,9 @@ jobs:
           elif [ "$STRATEGY" = "backtest-bounce" ]; then
             BODY_FILE="output/backtest_bounce_report_${DATE}.md"
             TITLE="Bollinger Band Bounce Strategy Backtest — ${DATE}"
+          elif [ "$STRATEGY" = "backtest-bounce-rsi45" ]; then
+            BODY_FILE="output/backtest_bounce_rsi45_report_${DATE}.md"
+            TITLE="Bollinger Band Bounce Backtest (RSI < 45) — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"

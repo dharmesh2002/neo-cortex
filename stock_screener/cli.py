@@ -1327,7 +1327,7 @@ def main():
                                  "bounce-fundamentals", "decline-reversal",
                                  "backtest-decline-reversal", "buffett", "buffett-relaxed",
                                  "breadth", "bb-buy", "bb-breakout", "backtest-bb-buy",
-                                 "backtest-bounce"],
+                                 "backtest-bounce", "backtest-bounce-rsi45"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -1398,7 +1398,10 @@ def main():
                              "strategy (4 conditions: BB touch + close recovery, RSI turning up, "
                              "volume > 20-day avg, stock outperforms universe that day). Entry "
                              "at signal candle close, stop = entry - 0.75×ATR14, target = "
-                             "entry × 1.03. Fresh-entry only (multi-day band touches count once).")
+                             "entry × 1.03. Fresh-entry only (multi-day band touches count once). "
+                             "'backtest-bounce-rsi45': same as backtest-bounce but with RSI(14) "
+                             "< 45 floor added back (tests whether filtering to genuinely "
+                             "oversold setups recovers the edge).")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -1470,6 +1473,34 @@ def main():
         trades_df.to_csv(trades_path, index=False)
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(_build_backtest_bounce_markdown_report(result))
+        print(f"\nSaved: {trades_path}")
+        print(f"Saved: {report_path}")
+        return
+
+    if args.strategy == "backtest-bounce-rsi45":
+        result = run_backtest_bounce(csv_dir=args.csv_dir, rsi_floor=45.0)
+        trades_df = _format_backtest_bounce_trades(result["trades"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']}) "
+              f"over the last {result['period']}  [RSI < 45 floor]\n")
+        print(f"=== BOUNCE+RSI45 BACKTEST RESULTS ({result['total_signals']} signals) ===")
+        print(f"Win rate: {result['win_rate_pct']:.1f}%  "
+              f"Avg R-multiple: {result['avg_r_multiple']:+.4f}  "
+              f"Wins/Losses/TimeExits: {result['wins']}/{result['losses']}/{result['time_exits']}")
+        print(f"Avg % to target: {result['avg_pct_to_target']:.2f}%  "
+              f"Avg % stop dist: {result['avg_pct_stop_dist']:.2f}%")
+
+        trades_path = os.path.join(args.output_dir, f"backtest_bounce_rsi45_trades_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"backtest_bounce_rsi45_report_{today}.md")
+        trades_df.to_csv(trades_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            r = _build_backtest_bounce_markdown_report(result)
+            r = r.replace("Bollinger Band Bounce Strategy Backtest",
+                          "Bollinger Band Bounce Strategy Backtest (RSI < 45 floor)")
+            r = r.replace("RSI condition**: RSI(14) today > RSI(14) yesterday (turning up — no fixed floor)",
+                          "RSI condition**: RSI(14) today > RSI(14) yesterday AND RSI(14) < 45")
+            f.write(r)
         print(f"\nSaved: {trades_path}")
         print(f"Saved: {report_path}")
         return
