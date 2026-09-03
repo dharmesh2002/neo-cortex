@@ -26,6 +26,7 @@ from .nifty50_scan import run_nifty50_scan
 from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_screen
 from .screener import run_screen
 from .support_levels import check_support_levels_for_tickers
+from .bb_buy_strategy import run_bb_buy_screen
 from .support_zone_strategy import run_support_zone_screen
 
 logger = logging.getLogger(__name__)
@@ -942,6 +943,87 @@ def _build_buffett_relaxed_markdown_report(df: pd.DataFrame, universe_size: int,
     return "\n".join(lines) + "\n"
 
 
+def _format_bb_buy(matches: list) -> pd.DataFrame:
+    if not matches:
+        return pd.DataFrame()
+    df = pd.DataFrame(matches)
+    df = df[[
+        "ticker", "company", "sector", "industry", "close", "low",
+        "lower_band", "mid_band", "rsi14", "sma200",
+        "volume_today_L", "avg_volume_20d_L", "avg_daily_value_cr",
+        "stop_loss", "target", "pct_to_target", "pct_stop_distance", "risk_reward",
+    ]]
+    for col in ["close", "low", "lower_band", "mid_band", "rsi14", "sma200",
+                "avg_daily_value_cr", "stop_loss", "target",
+                "pct_to_target", "pct_stop_distance", "risk_reward"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _format_bb_buy_near_miss(near_miss: list) -> pd.DataFrame:
+    if not near_miss:
+        return pd.DataFrame()
+    df = pd.DataFrame(near_miss)
+    df = df[[
+        "ticker", "company", "sector", "industry", "close",
+        "lower_band", "mid_band", "rsi14", "sma200",
+        "avg_volume_20d_L", "avg_daily_value_cr",
+        "pct_to_target", "volume_spike", "above_200sma",
+    ]]
+    for col in ["close", "lower_band", "mid_band", "rsi14", "sma200",
+                "avg_daily_value_cr", "pct_to_target"]:
+        df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_bb_buy_markdown_report(matches_df: pd.DataFrame, near_miss_df: pd.DataFrame,
+                                   universe_size: int, history_fetched: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# BB Bounce Buy Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
+        "",
+        f"## Buy signals ({len(matches_df)})",
+        "",
+        "All four conditions met: signal candle low ≤ lower Bollinger Band (20-period, 2 std), "
+        "RSI(14) < 40, volume spike (today > prior 20-day average), and close above the 200-day SMA.",
+        "",
+    ]
+    if matches_df.empty:
+        lines.append("No signals today.")
+    else:
+        lines.append(matches_df.to_markdown(index=False))
+    lines += [
+        "",
+        f"## Near-miss watchlist ({len(near_miss_df)})",
+        "",
+        "Close within 1% of the lower band with RSI 40–45, above the 200-day SMA — "
+        "setup forming but not yet triggered. Watch for a lower-band touch on the next candle.",
+        "",
+    ]
+    if near_miss_df.empty:
+        lines.append("No near-misses today.")
+    else:
+        lines.append(near_miss_df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "**Bollinger Band Buy-Side Intraday Strategy (mean-reversion bounce)** — "
+        "signal candle low touches or crosses the lower Bollinger Band (20-period, 2 std dev) "
+        "AND RSI(14) < 40 (oversold) AND volume spike (today's volume > prior 20-day average) "
+        "AND close above the 200-day SMA (only buy pullbacks in uptrends, not breakdowns). "
+        "Entry: next candle open. Target: middle band (20-day SMA). Stop: low of signal candle. "
+        "Typical move to target: 1–1.5%; typical stop distance: 0.4–0.5%. "
+        "`risk_reward` = pct_to_target / pct_stop_distance. "
+        "Universe: Nifty 50 + Nifty Next 50 + Nifty Midcap 50 + Nifty Midcap 150 + "
+        "Nifty Smallcap 100; liquidity filter ≥ Rs 20cr/day and ≥ 5 lakh shares/day. "
+        "This strategy has NOT been backtested — treat signals as unproven until validated. "
+        "Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _format_breadth_table(stats_list: list, name_key: str) -> pd.DataFrame:
     if not stats_list:
         return pd.DataFrame()
@@ -1035,7 +1117,7 @@ def main():
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
                                  "bounce-fundamentals", "decline-reversal",
                                  "backtest-decline-reversal", "buffett", "buffett-relaxed",
-                                 "breadth"],
+                                 "breadth", "bb-buy"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -1084,7 +1166,15 @@ def main():
                              "decliners, average move by market-cap segment and by sector, "
                              "top 10 gainers/losers. No exclusions, no fundamentals gate, no "
                              "technical zone -- the whole-market baseline every other "
-                             "strategy here is measured against.")
+                             "strategy here is measured against. "
+                             "'bb-buy': Bollinger Band bounce buy (mean-reversion, buy-side "
+                             "only) -- signal candle low touches/crosses the lower Bollinger "
+                             "Band (20-period, 2 std) AND RSI(14)<40 AND volume spike "
+                             "(today>prior 20-day avg) AND close above 200-day SMA. Entry: "
+                             "next candle open. Target: middle band (~1-1.5%). Stop: signal "
+                             "candle low (~0.4-0.5%). Stocks above 200 SMA only (uptrend "
+                             "pullbacks, not breakdowns). Liquidity: >=Rs 20cr/day and "
+                             ">=5 lakh shares/day.")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -1108,6 +1198,31 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "bb-buy":
+        result = run_bb_buy_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        matches_df = _format_bb_buy(result["matches"])
+        near_miss_df = _format_bb_buy_near_miss(result["near_miss"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']})\n")
+        print(f"=== BB BOUNCE BUY SIGNALS ({len(matches_df)}) ===")
+        print(matches_df.to_string(index=False) if not matches_df.empty else "No signals today.")
+        print(f"\n=== NEAR-MISS WATCHLIST ({len(near_miss_df)}) ===")
+        print(near_miss_df.to_string(index=False) if not near_miss_df.empty else "No near-misses today.")
+
+        matches_path = os.path.join(args.output_dir, f"bb_buy_{today}.csv")
+        near_miss_path = os.path.join(args.output_dir, f"bb_buy_near_miss_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"bb_buy_report_{today}.md")
+        matches_df.to_csv(matches_path, index=False)
+        near_miss_df.to_csv(near_miss_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_bb_buy_markdown_report(
+                matches_df, near_miss_df, result["universe_size"], result["history_fetched"]))
+        print(f"\nSaved: {matches_path}")
+        print(f"Saved: {near_miss_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "breadth":
         result = run_market_breadth(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
