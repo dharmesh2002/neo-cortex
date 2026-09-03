@@ -38,6 +38,7 @@ on:
           - breadth
           - capitulation
           - structure
+          - debug-volatility
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -61,6 +62,7 @@ jobs:
         run: pip install -r stock_screener/requirements.txt
 
       - name: Run screener
+        if: github.event.inputs.strategy != 'debug-volatility'
         run: |
           python -m stock_screener \
             --strategy "${{ github.event.inputs.strategy || 'bounce' }}" \
@@ -68,8 +70,15 @@ jobs:
             --tickers "${{ github.event.inputs.tickers || '' }}" \
             --output-dir output
 
+      # Ad-hoc, temporary: ranks the universe by frequency of >=1% daily
+      # moves and ATR% to find a liquid, genuinely volatile name. Remove
+      # this step (and debug_volatility.py) once done.
+      - name: Run diagnostic
+        if: github.event.inputs.strategy == 'debug-volatility'
+        run: python debug_volatility.py
+
       - name: Post results as a GitHub issue
-        if: always()
+        if: always() && github.event.inputs.strategy != 'debug-volatility'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STRATEGY: ${{ github.event.inputs.strategy || 'bounce' }}
