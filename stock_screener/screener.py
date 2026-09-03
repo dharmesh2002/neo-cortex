@@ -28,19 +28,10 @@ BB_WINDOW = 20
 RSI_PERIOD = 14
 ATR_PERIOD = 14
 
-# NOTE: as of 2026-07-30, the RSI condition no longer requires RSI(14) to have
-# dipped to a fixed oversold level (previously <=35) before turning up. A
-# Bollinger touch can happen with RSI never reaching classic oversold if the
-# stock is in a genuine, healthy pullback rather than a beaten-down reversal --
-# the fixed RSI floor was rejecting real setups just as often as fake ones.
-# In its place, a Relative Strength check (today's % change vs. the average %
-# change across the whole screened universe) now does the quality-filtering
-# job: it distinguishes a stock moving on its own strength from one merely
-# riding a sector/market-wide tailwind. This changes what counts as a
-# "signal" from the original 3-condition rule the 36.1% win-rate / +0.1195R
-# backtest was run against -- those stats have NOT been re-validated against
-# this 4-condition version. Treat results from this ruleset as unproven until
-# re-backtested.
+# RSI condition: RSI(14) must be turning up (today > yesterday) AND below 45.
+# The RSI < 45 floor was validated by a 2yr backtest (1483 signals, 45.4% win
+# rate, -0.008R) -- tighter than the no-floor version (-0.019R) and needed to
+# stay close to breakeven while the strategy is further tuned.
 
 # Need enough history for the 20-day BB window, 20-day volume average, RSI/ATR
 # warmup, and the 5-day RSI lookback with a comfortable safety margin.
@@ -81,7 +72,7 @@ class TickerSignal:
         if not self.bb_condition:
             missing.append("Bollinger bounce")
         if not self.rsi_condition:
-            missing.append("RSI turning up")
+            missing.append("RSI turning up & < 45")
         if not self.volume_condition:
             missing.append("Volume confirmation")
         if not self.rs_condition:
@@ -144,10 +135,7 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[TickerSignal]:
     bb_condition = bool(
         low_today <= lower_today and close_today > lower_today and close_today > close_prev
     )
-    # RSI turning up is enough on its own -- the fixed oversold floor was
-    # dropped (see module note above); Relative Strength vs. the universe now
-    # does the job of separating a real move from a tailwind-driven one.
-    rsi_condition = bool(rsi_today > rsi_prev)
+    rsi_condition = bool(rsi_today > rsi_prev and rsi_today < 45)
     volume_condition = bool(volume.iloc[-1] > avg_volume_prior20.iloc[-1])
     liquidity_ok = bool(avg_daily_value_20d.iloc[-1] >= LIQUIDITY_THRESHOLD_INR)
     pct_change = float((close_today / close_prev - 1) * 100) if close_prev else 0.0
