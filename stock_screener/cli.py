@@ -977,12 +977,16 @@ def _format_bb_buy_near_miss(near_miss: list) -> pd.DataFrame:
 
 
 def _build_bb_buy_markdown_report(matches_df: pd.DataFrame, near_miss_df: pd.DataFrame,
-                                   universe_size: int, history_fetched: int) -> str:
+                                   universe_size: int, history_fetched: int,
+                                   nifty100_only: bool = False) -> str:
     today = date.today().isoformat()
+    universe_label = "Nifty 100 (Nifty 50 + Nifty Next 50)" if nifty100_only else \
+        "Nifty 50 + Nifty Next 50 + Nifty Midcap 50 + Nifty Midcap 150 + Nifty Smallcap 100"
     lines = [
         f"# BB Bounce Buy Screener — {today}",
         "",
-        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
+        f"Universe: {universe_size} tickers ({universe_label}; "
+        f"price history fetched for {history_fetched}).",
         "",
         f"## Buy signals ({len(matches_df)})",
         "",
@@ -1016,8 +1020,7 @@ def _build_bb_buy_markdown_report(matches_df: pd.DataFrame, near_miss_df: pd.Dat
         "Entry: next candle open. Target: middle band (20-day SMA). Stop: low of signal candle. "
         "Typical move to target: 1–1.5%; typical stop distance: 0.4–0.5%. "
         "`risk_reward` = pct_to_target / pct_stop_distance. "
-        "Universe: Nifty 50 + Nifty Next 50 + Nifty Midcap 50 + Nifty Midcap 150 + "
-        "Nifty Smallcap 100; liquidity filter ≥ Rs 20cr/day and ≥ 5 lakh shares/day. "
+        f"Universe: {universe_label}; liquidity filter ≥ Rs 20cr/day and ≥ 5 lakh shares/day. "
         "This strategy has NOT been backtested — treat signals as unproven until validated. "
         "Not investment advice.",
     ]
@@ -1185,6 +1188,9 @@ def main():
                              "used instead of hitting niftyindices.com directly.")
     parser.add_argument("--output-dir", type=str, default="output",
                         help="Directory to write signals/near-miss CSVs into (default: ./output).")
+    parser.add_argument("--nifty100", action="store_true",
+                        help="Restrict --strategy bb-buy to Nifty 100 only "
+                             "(Nifty 50 + Nifty Next 50), skipping midcap/smallcap names.")
     parser.add_argument("--info-sleep", type=float, default=0.3,
                         help="Seconds to sleep between yfinance sector/industry lookups "
                              "(default: 0.3, to be gentle on rate limits).")
@@ -1200,11 +1206,13 @@ def main():
     today = date.today().isoformat()
 
     if args.strategy == "bb-buy":
-        result = run_bb_buy_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        result = run_bb_buy_screen(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep,
+                                   nifty100_only=args.nifty100)
         matches_df = _format_bb_buy(result["matches"])
         near_miss_df = _format_bb_buy_near_miss(result["near_miss"])
 
-        print(f"\nUniverse: {result['universe_size']} tickers "
+        universe_label = "Nifty 100 (50 + Next 50)" if result["nifty100_only"] else "full universe"
+        print(f"\nUniverse: {result['universe_size']} tickers [{universe_label}] "
               f"(price history fetched for {result['history_fetched']})\n")
         print(f"=== BB BOUNCE BUY SIGNALS ({len(matches_df)}) ===")
         print(matches_df.to_string(index=False) if not matches_df.empty else "No signals today.")
@@ -1218,7 +1226,8 @@ def main():
         near_miss_df.to_csv(near_miss_path, index=False)
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(_build_bb_buy_markdown_report(
-                matches_df, near_miss_df, result["universe_size"], result["history_fetched"]))
+                matches_df, near_miss_df, result["universe_size"], result["history_fetched"],
+                nifty100_only=result["nifty100_only"]))
         print(f"\nSaved: {matches_path}")
         print(f"Saved: {near_miss_path}")
         print(f"Saved: {report_path}")

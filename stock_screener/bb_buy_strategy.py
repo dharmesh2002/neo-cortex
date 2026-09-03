@@ -137,7 +137,11 @@ def evaluate_bb_buy_ticker(df: pd.DataFrame) -> Optional[BBBuyCandidate]:
     )
 
 
-def run_bb_buy_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) -> Dict:
+NIFTY100_INDICES = {"NIFTY50", "NIFTYNEXT50"}
+
+
+def run_bb_buy_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3,
+                      nifty100_only: bool = False) -> Dict:
     import time
 
     import yfinance as yf
@@ -146,6 +150,9 @@ def run_bb_buy_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) -> D
     from .universe import build_universe, is_excluded
 
     universe = build_universe(csv_dir=csv_dir)
+    if nifty100_only:
+        universe = universe[universe["Index"].isin(NIFTY100_INDICES)].reset_index(drop=True)
+        logger.info("Nifty 100 filter applied: %d tickers", len(universe))
     tickers = universe["Ticker"].tolist()
     ticker_to_company = dict(zip(universe["Ticker"], universe.get("Company Name", universe["Symbol"])))
 
@@ -213,4 +220,5 @@ def run_bb_buy_screen(csv_dir: str = None, info_sleep_seconds: float = 0.3) -> D
         "near_miss": near_miss,
         "universe_size": len(tickers),
         "history_fetched": len(history),
+        "nifty100_only": nifty100_only,
     }
