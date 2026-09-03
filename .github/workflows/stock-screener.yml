@@ -36,6 +36,17 @@ on:
           - buffett
           - buffett-relaxed
           - breadth
+          - bb-buy
+          - bb-breakout
+          - backtest-bb-buy
+      nifty100:
+        description: "Restrict bb-buy / bb-breakout / backtest-bb-buy to Nifty 100 only (Nifty 50 + Next 50)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -60,10 +71,15 @@ jobs:
 
       - name: Run screener
         run: |
+          NIFTY100_FLAG=""
+          if [ "${{ github.event.inputs.nifty100 }}" = "true" ]; then
+            NIFTY100_FLAG="--nifty100"
+          fi
           python -m stock_screener \
             --strategy "${{ github.event.inputs.strategy || 'bounce' }}" \
             --capital "${{ github.event.inputs.capital || vars.SCREENER_CAPITAL || '100000' }}" \
             --tickers "${{ github.event.inputs.tickers || '' }}" \
+            $NIFTY100_FLAG \
             --output-dir output
 
       - name: Post results as a GitHub issue
@@ -124,6 +140,15 @@ jobs:
           elif [ "$STRATEGY" = "breadth" ]; then
             BODY_FILE="output/breadth_report_${DATE}.md"
             TITLE="Market Breadth — ${DATE}"
+          elif [ "$STRATEGY" = "bb-buy" ]; then
+            BODY_FILE="output/bb_buy_report_${DATE}.md"
+            TITLE="BB Bounce Buy Screener — ${DATE}"
+          elif [ "$STRATEGY" = "bb-breakout" ]; then
+            BODY_FILE="output/bb_breakout_report_${DATE}.md"
+            TITLE="BB Breakout Buy Screener — ${DATE}"
+          elif [ "$STRATEGY" = "backtest-bb-buy" ]; then
+            BODY_FILE="output/backtest_bb_buy_report_${DATE}.md"
+            TITLE="BB Bounce Buy Backtest — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"
@@ -141,5 +166,54 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: screener-output-${{ github.run_id }}
+          path: output/
+          retention-days: 30
+
+  screen-bb-buy-nifty100:
+    name: BB Bounce Buy — Nifty 100 (daily)
+    runs-on: ubuntu-latest
+    # Runs only on the scheduled trigger, not on manual workflow_dispatch
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r stock_screener/requirements.txt
+
+      - name: Run BB Bounce Buy screener (Nifty 100)
+        run: |
+          python -m stock_screener \
+            --strategy bb-buy \
+            --nifty100 \
+            --output-dir output
+
+      - name: Post results as a GitHub issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create stock-screener --color 0E8A16 \
+            --description "Automated Bollinger/RSI/Volume screener results" 2>/dev/null || true
+
+          DATE=$(date -u +%Y-%m-%d)
+          BODY_FILE="output/bb_buy_report_${DATE}.md"
+          TITLE="BB Bounce Buy — Nifty 100 — ${DATE}"
+          if [ -f "$BODY_FILE" ]; then
+            gh issue create --title "$TITLE" --body-file "$BODY_FILE" --label stock-screener
+          else
+            gh issue create --title "${TITLE} (run failed)" \
+              --body "The bb-buy screener run did not produce a report file. Check the workflow logs." \
+              --label stock-screener
+          fi
+
+      - name: Upload CSVs as workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bb-buy-nifty100-output-${{ github.run_id }}
           path: output/
           retention-days: 30
