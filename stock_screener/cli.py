@@ -27,6 +27,7 @@ from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_scre
 from .screener import run_screen
 from .support_levels import check_support_levels_for_tickers
 from .backtest_bb_buy import run_backtest as run_backtest_bb_buy
+from .backtest_bounce import run_backtest_bounce
 from .bb_breakout_strategy import run_bb_breakout_screen
 from .bb_buy_strategy import run_bb_buy_screen
 from .support_zone_strategy import run_support_zone_screen
@@ -1172,6 +1173,66 @@ def _build_backtest_bb_buy_markdown_report(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _format_backtest_bounce_trades(trades: list) -> pd.DataFrame:
+    if not trades:
+        return pd.DataFrame()
+    df = pd.DataFrame([asdict(t) for t in trades])
+    df = df[[
+        "ticker", "signal_date", "entry", "stop_loss", "target", "exit_date",
+        "exit_reason", "exit_price", "days_held", "r_multiple",
+        "pct_to_target", "pct_stop_dist",
+    ]]
+    for col in ["entry", "stop_loss", "target", "exit_price", "r_multiple",
+                "pct_to_target", "pct_stop_dist"]:
+        df[col] = df[col].astype(float).round(4)
+    return df.sort_values("signal_date", ascending=False).reset_index(drop=True)
+
+
+def _build_backtest_bounce_markdown_report(result: dict) -> str:
+    today = date.today().isoformat()
+    total = result["total_signals"]
+    lines = [
+        f"# Bollinger Band Bounce Strategy Backtest — {today}",
+        "",
+        f"Backtests the exact rule behind the live `bounce` strategy across the full universe "
+        f"(Nifty 50 + Nifty Next 50 + Nifty Midcap 50 + Nifty Midcap 150 + Nifty Smallcap 100). "
+        f"Universe: {result['universe_size']} tickers (price history fetched for "
+        f"{result['history_fetched']}), over the last {result['period']}.",
+        "",
+        "## Strategy conditions",
+        "",
+        "1. **BB condition**: candle low ≤ lower Bollinger Band (20, 2σ) AND close > lower band AND close > prior close",
+        "2. **RSI condition**: RSI(14) today > RSI(14) yesterday (turning up — no fixed floor)",
+        "3. **Volume**: today's volume > prior 20-day average volume",
+        "4. **Relative strength**: stock's daily % change > universe average % change that day",
+        "",
+        "## Results",
+        "",
+        f"- **Total signals**: {total} (fresh entry only — a multi-day band touch counts once)",
+        f"- **Win rate**: {result['win_rate_pct']:.1f}% "
+        f"({result['wins']} target hits + {result['time_exit_wins']} of "
+        f"{result['time_exits']} time-exits still net positive, out of {total})",
+        f"- **Average R-multiple**: {result['avg_r_multiple']:+.4f}R per trade",
+        f"- **Stop-outs**: {result['losses']}",
+        f"- **Average days held for winners**: {result['avg_days_held_winners']:.1f}",
+        f"- **Average % to target** at signal time: {result['avg_pct_to_target']:.2f}%",
+        f"- **Average % stop distance** at signal time: {result['avg_pct_stop_dist']:.2f}%",
+        "",
+        "---",
+        "**Methodology**: entry at the signal candle's close, stop-loss at entry − 0.75 × ATR(14) "
+        "at signal time (mirrors the live screener), target at entry × 1.03 (3% fixed target, "
+        "same as the live screener). A trade is closed at the target or the stop, whichever is "
+        f"hit first over the following {MAX_HOLDING_DAYS} trading days; if neither is hit within "
+        "that window it's closed at that day's close (a \"time exit\", counted as a win only if "
+        "the R-multiple came out positive). If a single day's range touches both the stop and "
+        "the target, the stop is assumed to have hit first (conservative).",
+        "",
+        "**Caveats**: current universe applied backward (survivorship bias). No transaction costs, "
+        "slippage, or taxes modeled. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _format_breadth_table(stats_list: list, name_key: str) -> pd.DataFrame:
     if not stats_list:
         return pd.DataFrame()
@@ -1265,7 +1326,8 @@ def main():
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
                                  "bounce-fundamentals", "decline-reversal",
                                  "backtest-decline-reversal", "buffett", "buffett-relaxed",
-                                 "breadth", "bb-buy", "bb-breakout", "backtest-bb-buy"],
+                                 "breadth", "bb-buy", "bb-breakout", "backtest-bb-buy",
+                                 "backtest-bounce"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -1331,7 +1393,12 @@ def main():
                              "'backtest-bb-buy': ~2yr historical backtest of the bb-buy "
                              "rule, reporting real win rate and R-multiple. Entry at signal "
                              "candle close, stop at signal candle low, target at mid band. "
-                             "Use --nifty100 to restrict to Nifty 100 only.")
+                             "Use --nifty100 to restrict to Nifty 100 only. "
+                             "'backtest-bounce': ~2yr historical backtest of the live bounce "
+                             "strategy (4 conditions: BB touch + close recovery, RSI turning up, "
+                             "volume > 20-day avg, stock outperforms universe that day). Entry "
+                             "at signal candle close, stop = entry - 0.75×ATR14, target = "
+                             "entry × 1.03. Fresh-entry only (multi-day band touches count once).")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -1380,6 +1447,29 @@ def main():
         trades_df.to_csv(trades_path, index=False)
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(_build_backtest_bb_buy_markdown_report(result))
+        print(f"\nSaved: {trades_path}")
+        print(f"Saved: {report_path}")
+        return
+
+    if args.strategy == "backtest-bounce":
+        result = run_backtest_bounce(csv_dir=args.csv_dir)
+        trades_df = _format_backtest_bounce_trades(result["trades"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']}) "
+              f"over the last {result['period']}\n")
+        print(f"=== BOUNCE BACKTEST RESULTS ({result['total_signals']} signals) ===")
+        print(f"Win rate: {result['win_rate_pct']:.1f}%  "
+              f"Avg R-multiple: {result['avg_r_multiple']:+.4f}  "
+              f"Wins/Losses/TimeExits: {result['wins']}/{result['losses']}/{result['time_exits']}")
+        print(f"Avg % to target: {result['avg_pct_to_target']:.2f}%  "
+              f"Avg % stop dist: {result['avg_pct_stop_dist']:.2f}%")
+
+        trades_path = os.path.join(args.output_dir, f"backtest_bounce_trades_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"backtest_bounce_report_{today}.md")
+        trades_df.to_csv(trades_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_backtest_bounce_markdown_report(result))
         print(f"\nSaved: {trades_path}")
         print(f"Saved: {report_path}")
         return
