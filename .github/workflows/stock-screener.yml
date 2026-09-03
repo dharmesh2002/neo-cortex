@@ -38,7 +38,6 @@ on:
           - breadth
           - capitulation
           - structure
-          - debug-latest-check
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -62,7 +61,6 @@ jobs:
         run: pip install -r stock_screener/requirements.txt
 
       - name: Run screener
-        if: github.event.inputs.strategy != 'debug-latest-check'
         run: |
           python -m stock_screener \
             --strategy "${{ github.event.inputs.strategy || 'bounce' }}" \
@@ -70,15 +68,8 @@ jobs:
             --tickers "${{ github.event.inputs.tickers || '' }}" \
             --output-dir output
 
-      # Ad-hoc, temporary: confirms latest trading date/close for the top
-      # candidates from today's capitulation/structure runs. Remove this
-      # step (and debug_latest_check.py) once done.
-      - name: Run diagnostic
-        if: github.event.inputs.strategy == 'debug-latest-check'
-        run: python debug_latest_check.py
-
       - name: Post results as a GitHub issue
-        if: always() && github.event.inputs.strategy != 'debug-latest-check'
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STRATEGY: ${{ github.event.inputs.strategy || 'bounce' }}
