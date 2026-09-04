@@ -23,6 +23,13 @@ from .divergence_strategy import run_divergence_screen
 from .gap_fill_strategy import run_gap_fill_screen
 from .market_breadth import run_market_breadth
 from .nifty50_scan import run_nifty50_scan
+from .sector_opportunities import (
+    CORRELATION_MIN,
+    CORRELATION_WINDOW,
+    LAG_RATIO,
+    SECTOR_UP_THRESHOLD_PCT,
+    run_sector_opportunities,
+)
 from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_screen
 from .screener import run_screen
 from .support_levels import check_support_levels_for_tickers
@@ -1024,6 +1031,71 @@ def _build_market_breadth_markdown_report(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _format_sector_opportunities(rows: list) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df = df[[
+        "ticker", "company", "sector", "industry",
+        "sector_pct_today", "stock_pct_today", "lag_pct",
+        "sector_correlation", "avg_daily_value_cr",
+    ]]
+    return df
+
+
+def _format_sector_summary(rows: list) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df = df[["sector", "avg_pct_change", "count", "advancers", "decliners", "is_up"]]
+    return df
+
+
+def _build_sector_opportunities_markdown_report(
+        opps_df: pd.DataFrame, sector_df: pd.DataFrame,
+        up_sectors: list, universe_size: int, history_fetched: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Sector Opportunities (Laggard Catch-Up) — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}). "
+        f"Sectors up today (avg >= {SECTOR_UP_THRESHOLD_PCT:.1f}%): "
+        f"{', '.join(up_sectors) if up_sectors else 'none'}.",
+        "",
+        "## Opportunities — sector-correlated stocks not yet moved",
+        "",
+        f"Criteria: stock in a rising sector AND Pearson correlation with sector "
+        f">= {CORRELATION_MIN} over the last {CORRELATION_WINDOW} trading days AND "
+        f"stock's today move <= {LAG_RATIO * 100:.0f}% of the sector's today move.",
+        "",
+    ]
+    if opps_df.empty:
+        lines.append("No laggard opportunities found today.")
+    else:
+        lines.append(opps_df.to_markdown(index=False))
+    lines += [
+        "",
+        "## All sectors by today's performance",
+        "",
+    ]
+    if sector_df.empty:
+        lines.append("No sector data.")
+    else:
+        lines.append(sector_df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "`sector_pct_today` is the simple average of every stock in that sector's day "
+        "change (not cap-weighted). `lag_pct` is how many percentage points behind the "
+        "stock is relative to its sector average. `sector_correlation` is Pearson r "
+        f"over the last {CORRELATION_WINDOW} trading days between the stock's daily "
+        "returns and the sector's average daily return -- a higher value means the stock "
+        "has historically moved with its sector, making today's divergence more notable. "
+        "This pattern has no backtest. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
@@ -1035,7 +1107,7 @@ def main():
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
                                  "bounce-fundamentals", "decline-reversal",
                                  "backtest-decline-reversal", "buffett", "buffett-relaxed",
-                                 "breadth"],
+                                 "breadth", "sector-opportunities"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -1048,7 +1120,7 @@ def main():
                              "resistance reference points) for an explicit --tickers list. "
                              "'nifty50-scan': combined technical zone + fundamentals across all "
                              "Nifty 50 stocks, ranked by pullback-zone + clean-fundamentals first. "
-                             "'gap-fill': stocks with a recent unfilled gap-down (opened >=2% "
+                             "'gap-fill': stocks with a recent unfilled gap-down (opened >=2%% "
                              "below prior close and haven't closed back up to that level yet). "
                              "'divergence': bullish RSI divergence -- price makes a lower swing "
                              "low while RSI(14) makes a higher low at the same time. "
@@ -1061,22 +1133,22 @@ def main():
                              "improves the plain rule. "
                              "'backtest-support-zone-rr': same backtest but with a fixed 2:1 "
                              "target-to-stop ratio (target = entry + 2x the ATR-based stop "
-                             "distance) instead of a fixed +3% target, to test whether fixing "
+                             "distance) instead of a fixed +3%% target, to test whether fixing "
                              "the reward-to-risk mismatch improves the plain rule's expectancy. "
                              "'bounce-fundamentals': Bollinger bounce event (low touches lower "
                              "band, close recovers above it and above yesterday's close) + "
                              "RSI(14)<45 + volume above 20-day average + fundamentals bar "
-                             "(ROE>15%, D/E<100, growth, analyst not-Sell). "
+                             "(ROE>15%%, D/E<100, growth, analyst not-Sell). "
                              "'decline-reversal': 3 consecutive down days followed by a green "
                              "reversal candle (closes above its own open and above yesterday's "
-                             "close) landing within 2% of a real support level (SMAs, swing "
+                             "close) landing within 2%% of a real support level (SMAs, swing "
                              "lows, or Bollinger lower band). "
                              "'backtest-decline-reversal': ~2yr real-data historical backtest "
                              "of the decline-reversal rule, reporting real win rate and "
                              "R-multiple for that exact rule. "
-                             "'buffett': Warren Buffett-style quality/value screener -- ROE>15%, "
+                             "'buffett': Warren Buffett-style quality/value screener -- ROE>15%%, "
                              "D/E<50, both earnings AND revenue growth positive, positive free "
-                             "cash flow, profit margin>10%, trailing P/E<25, analyst not-Sell. "
+                             "cash flow, profit margin>10%%, trailing P/E<25, analyst not-Sell. "
                              "No technical trigger at all, pure business quality + valuation. "
                              "'buffett-relaxed': same bar with P/E ceiling raised to 40x and "
                              "growth relaxed to either earnings OR revenue positive. "
@@ -1084,7 +1156,12 @@ def main():
                              "decliners, average move by market-cap segment and by sector, "
                              "top 10 gainers/losers. No exclusions, no fundamentals gate, no "
                              "technical zone -- the whole-market baseline every other "
-                             "strategy here is measured against.")
+                             "strategy here is measured against. "
+                             "'sector-opportunities': sectors that are already moving up today "
+                             "+ stocks in those sectors that are strongly correlated with the "
+                             "sector historically (Pearson r >= 0.5 over the last 60 days) but "
+                             "haven't moved yet today (stock's move <= 40 pct of sector's move) -- "
+                             "the catch-up / laggard play. No backtest. Not investment advice.")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -1108,6 +1185,34 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "sector-opportunities":
+        result = run_sector_opportunities(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        opps_df = _format_sector_opportunities(result["opportunities"])
+        sector_df = _format_sector_summary(result["sector_summary"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']})\n")
+        print(f"Sectors up today (>= {SECTOR_UP_THRESHOLD_PCT:.1f}%): "
+              f"{', '.join(result['up_sectors']) if result['up_sectors'] else 'none'}")
+        print(f"\n=== LAGGARD OPPORTUNITIES ({len(opps_df)}) ===")
+        print(opps_df.to_string(index=False) if not opps_df.empty else "No opportunities found.")
+        print("\n=== SECTOR SUMMARY (best to worst) ===")
+        print(sector_df.to_string(index=False) if not sector_df.empty else "No sector data.")
+
+        opps_path = os.path.join(args.output_dir, f"sector_opportunities_{today}.csv")
+        sector_path = os.path.join(args.output_dir, f"sector_opportunities_sectors_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"sector_opportunities_report_{today}.md")
+        opps_df.to_csv(opps_path, index=False)
+        sector_df.to_csv(sector_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_sector_opportunities_markdown_report(
+                opps_df, sector_df, result["up_sectors"],
+                result["universe_size"], result["history_fetched"]))
+        print(f"\nSaved: {opps_path}")
+        print(f"Saved: {sector_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "breadth":
         result = run_market_breadth(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
