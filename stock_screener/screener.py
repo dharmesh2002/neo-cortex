@@ -21,17 +21,16 @@ logger = logging.getLogger(__name__)
 # without re-testing) ──
 LIQUIDITY_THRESHOLD_INR = 20 * 1e7  # 20 crore
 ATR_STOP_MULTIPLE = 0.75
-TARGET_GAIN_PCT = 0.03
+TARGET_GAIN_PCT = 0.01
 RISK_PER_TRADE_PCT = 0.005
 RSI_LOOKBACK_DAYS = 5
 BB_WINDOW = 20
 RSI_PERIOD = 14
 ATR_PERIOD = 14
 
-# RSI condition: RSI(14) must be turning up (today > yesterday) AND below 45.
-# The RSI < 45 floor was validated by a 2yr backtest (1483 signals, 45.4% win
-# rate, -0.008R) -- tighter than the no-floor version (-0.019R) and needed to
-# stay close to breakeven while the strategy is further tuned.
+# RSI condition: RSI(14) must be turning up (today > yesterday) AND below 50.
+# Target is 1% (not 3%) -- a BB lower-band bounce typically snaps back quickly;
+# 1% is achievable even with RSI up to 50 on a genuine band touch.
 
 # Need enough history for the 20-day BB window, 20-day volume average, RSI/ATR
 # warmup, and the 5-day RSI lookback with a comfortable safety margin.
@@ -72,7 +71,7 @@ class TickerSignal:
         if not self.bb_condition:
             missing.append("Bollinger bounce")
         if not self.rsi_condition:
-            missing.append("RSI turning up & < 45")
+            missing.append("RSI turning up & < 50")
         if not self.volume_condition:
             missing.append("Volume confirmation")
         if not self.rs_condition:
@@ -135,7 +134,7 @@ def evaluate_ticker(df: pd.DataFrame) -> Optional[TickerSignal]:
     bb_condition = bool(
         low_today <= lower_today and close_today > lower_today and close_today > close_prev
     )
-    rsi_condition = bool(rsi_today > rsi_prev and rsi_today < 45)
+    rsi_condition = bool(rsi_today > rsi_prev and rsi_today < 50)
     volume_condition = bool(volume.iloc[-1] > avg_volume_prior20.iloc[-1])
     liquidity_ok = bool(avg_daily_value_20d.iloc[-1] >= LIQUIDITY_THRESHOLD_INR)
     pct_change = float((close_today / close_prev - 1) * 100) if close_prev else 0.0

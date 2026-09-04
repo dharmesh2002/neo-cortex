@@ -103,7 +103,7 @@ def _build_markdown_report(signals_df: pd.DataFrame, near_miss_df: pd.DataFrame,
     lines += [
         "",
         "---",
-        "Bollinger Band bounce + RSI(14) turning up AND RSI(14) < 45 + volume "
+        "Bollinger Band bounce + RSI(14) turning up AND RSI(14) < 50 + volume "
         "confirmation + Relative Strength vs. the screened universe (positive "
         "`vs_universe_pct` means the stock is outperforming the average move across the "
         "universe today, i.e. moving on its own strength rather than riding a sector/market "
