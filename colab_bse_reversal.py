@@ -32,6 +32,10 @@ pd.set_option("display.float_format", lambda x: f"{x:.2f}")
 INDEX_TICKERS = ["^BSESN", "^NSEI"]
 
 STOCK_TICKERS = [
+    # BSE Ltd. (the exchange company stock — BSE.NS on NSE)
+    "BSE.NS",
+    # Exchange / market infrastructure peers
+    "MCX.NS", "CDSL.NS", "CAMS.NS",
     # Large cap
     "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
     "KOTAKBANK.NS", "WIPRO.NS", "TATAMOTORS.NS", "SBIN.NS", "AXISBANK.NS",
@@ -157,9 +161,46 @@ def analyze_reversal(df: pd.DataFrame, ticker: str) -> dict | None:
     }
 
 
-# ── Step 1: What did BSE / Nifty do today? ────────────────────────────────────
+# ── Step 0: BSE Ltd. stock (BSE.NS) ──────────────────────────────────────────
 print("=" * 60)
-print("STEP 1 — BSE Sensex & Nifty 50 today's candle pattern")
+print("STEP 0 — BSE Ltd. stock (BSE.NS) — today's candle")
+print("=" * 60)
+
+bse_raw = yf.download("BSE.NS", period="120d", interval="1d",
+                      auto_adjust=True, progress=False)
+bse_raw = bse_raw.dropna(how="all")
+if len(bse_raw) >= 30:
+    r0 = analyze_reversal(bse_raw, "BSE.NS")
+    c0  = float(bse_raw["Close"].iloc[-1])
+    o0  = float(bse_raw["Open"].iloc[-1])
+    h0  = float(bse_raw["High"].iloc[-1])
+    l0  = float(bse_raw["Low"].iloc[-1])
+    c0p = float(bse_raw["Close"].iloc[-2])
+    print(f"\nBSE Ltd. (BSE.NS)")
+    print(f"  Open:  {o0:>10,.2f}   High:  {h0:>10,.2f}")
+    print(f"  Low:   {l0:>10,.2f}   Close: {c0:>10,.2f}   Change: {(c0-c0p)/c0p*100:+.2f}%")
+    if r0:
+        print(f"  RSI14: {r0['rsi14']:.1f}   BB_lower: {r0['bb_lower']:,.2f}   Support: {r0['support']:,.2f}")
+        print(f"  Lower wick: {r0['lower_wick%']:.2f}% of price   Body: {r0['body%']:.2f}% of price")
+        print(f"\n  Pattern detected today:")
+        print(f"    Hammer/Pin-bar:      {'YES ✓' if r0['hammer'] else 'no'}")
+        print(f"    BB lower reversal:   {'YES ✓' if r0['bb_reversal'] else 'no'}")
+        print(f"    Near support:        {'YES ✓' if r0['near_support'] else 'no'}")
+        print(f"    RSI oversold bounce: {'YES ✓' if r0['rsi_bounce'] else 'no'}")
+        print(f"  Reversal score: {r0['score']}/4")
+        if r0["hammer"]:
+            print(f"\n  *** HAMMER: Fell to {l0:,.0f} intraday but closed at {c0:,.0f}")
+            print(f"      Buyers stepped in — lower wick = {r0['lower_wick%']:.1f}% of price.")
+        if r0["bb_reversal"]:
+            print(f"  *** BB LOWER BAND REVERSAL: Touched {r0['bb_lower']:,.0f}, recovered to {c0:,.0f}.")
+        if r0["near_support"]:
+            print(f"  *** SUPPORT BOUNCE: Near 120-day support at {r0['support']:,.0f}.")
+else:
+    print("  Could not fetch BSE.NS data.")
+
+# ── Step 1: Sensex / Nifty index context ─────────────────────────────────────
+print("\n" + "=" * 60)
+print("STEP 1 — Sensex & Nifty 50 index context today")
 print("=" * 60)
 
 idx_raw = yf.download(
