@@ -54,11 +54,20 @@ def _rsi(series, period=14):
 def _bb_lower(series, window=20, num_std=2.0):
     return series.rolling(window).mean() - num_std * series.rolling(window).std()
 
+def _flatten(df):
+    """Flatten MultiIndex columns from yfinance and normalise names."""
+    if isinstance(df.columns, pd.MultiIndex):
+        df = df.copy()
+        df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+    df.columns = [str(c).strip().title() for c in df.columns]
+    return df
+
 def detect_patterns_series(df):
     """
     Run pattern detection on every row (not just the last).
     Returns a DataFrame indexed by date with one bool column per pattern.
     """
+    df = _flatten(df)
     df = df.dropna(subset=["Open","High","Low","Close"]).copy()
     if len(df) < 30:
         return None
@@ -144,7 +153,7 @@ print("=" * 65)
 
 bse_raw = yf.download("BSE.NS", period="6mo", interval="1d",
                       auto_adjust=True, progress=False)
-bse_raw = bse_raw.dropna(how="all")
+bse_raw = _flatten(bse_raw).dropna(how="all")
 
 bse = detect_patterns_series(bse_raw)
 if bse is None:
