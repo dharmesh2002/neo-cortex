@@ -1,47 +1,29 @@
 """
-BSE / Nifty Bullish Reversal Scanner
-=====================================
+BSE.NS Pattern Scanner
+========================
+Step 1: Analyze BSE Ltd. stock — find exactly what pattern it formed today.
+Step 2: Scan all Nifty stocks for the SAME pattern.
+
 Run in Google Colab:
   !pip install yfinance pandas tabulate -q
-  # paste this script and run
-
-Detects the same reversal pattern BSE Sensex / Nifty showed today:
-  - Hammer / Pin-bar candle  (long lower wick, closed near top)
-  - Bollinger lower band touch + recovery
-  - Near horizontal support bounce
-  - RSI oversold bounce (RSI crossed up through 35 or still <= 38)
-
-Scores each ticker 0-4 and ranks by reversal strength.
+  # paste and run
 """
 
-# ── Install if needed ──────────────────────────────────────────────────────────
 # !pip install yfinance pandas tabulate -q
 
-import warnings
-warnings.filterwarnings("ignore")
+import warnings; warnings.filterwarnings("ignore")
 import pandas as pd
 import numpy as np
 import yfinance as yf
 
 pd.set_option("display.max_columns", None)
-pd.set_option("display.width", 220)
-pd.set_option("display.float_format", lambda x: f"{x:.2f}")
+pd.set_option("display.width", 200)
 
-# ── Tickers ────────────────────────────────────────────────────────────────────
-# Indices to check first (^BSESN = Sensex, ^NSEI = Nifty 50)
-INDEX_TICKERS = ["^BSESN", "^NSEI"]
-
-STOCK_TICKERS = [
-    # BSE Ltd. (the exchange company stock — BSE.NS on NSE)
-    "BSE.NS",
-    # Exchange / market infrastructure peers
-    "MCX.NS", "CDSL.NS", "CAMS.NS",
-    # Large cap
+TICKERS = [
     "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
     "KOTAKBANK.NS", "WIPRO.NS", "TATAMOTORS.NS", "SBIN.NS", "AXISBANK.NS",
     "ITC.NS", "LT.NS", "SUNPHARMA.NS", "MARUTI.NS", "BAJFINANCE.NS",
     "NTPC.NS", "POWERGRID.NS", "TITAN.NS", "ULTRACEMCO.NS", "ONGC.NS",
-    # Midcap / sectoral
     "CIPLA.NS", "DRREDDY.NS", "DIVISLAB.NS", "AUROPHARMA.NS",
     "HCLTECH.NS", "TECHM.NS", "MPHASIS.NS",
     "BAJAJFINSV.NS", "SHRIRAMFIN.NS", "CHOLAFIN.NS",
@@ -49,15 +31,15 @@ STOCK_TICKERS = [
     "ASIANPAINT.NS", "BERGERPAINTS.NS",
     "DMART.NS", "TRENT.NS", "NYKAA.NS",
     "INDIGO.NS", "IRCTC.NS",
-    "ADANIENT.NS", "ADANIPORTS.NS", "ADANIPOWER.NS",
+    "ADANIENT.NS", "ADANIPORTS.NS",
     "HDFCLIFE.NS", "SBILIFE.NS", "ICICIGI.NS",
-    "PIDILITIND.NS", "BALKRISIND.NS",
-    "ZOMATO.NS", "PAYTM.NS", "POLICYBZR.NS",
+    "PIDILITIND.NS", "ZOMATO.NS",
+    "MCX.NS", "CDSL.NS", "CAMS.NS",
 ]
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 
-def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
+def _rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -66,253 +48,201 @@ def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
     rs = avg_gain / avg_loss.replace(0, np.nan)
     return 100 - 100 / (1 + rs)
 
+def _bb_lower(series, window=20, num_std=2.0):
+    return series.rolling(window).mean() - num_std * series.rolling(window).std()
 
-def _bollinger(series: pd.Series, window: int = 20, num_std: float = 2.0):
-    mid = series.rolling(window).mean()
-    std = series.rolling(window).std()
-    return mid - num_std * std, mid, mid + num_std * std
-
-
-def analyze_reversal(df: pd.DataFrame, ticker: str) -> dict | None:
-    """Return reversal metrics for the latest candle."""
-    df = df.dropna(subset=["Open", "High", "Low", "Close"])
+def detect_patterns(df):
+    """Returns dict of all pattern flags + values for the latest candle."""
+    df = df.dropna(subset=["Open","High","Low","Close"])
     if len(df) < 30:
         return None
 
-    close = df["Close"]
-    high  = df["High"]
-    low   = df["Low"]
-    open_ = df["Open"]
+    c  = float(df["Close"].iloc[-1])
+    o  = float(df["Open"].iloc[-1])
+    h  = float(df["High"].iloc[-1])
+    l  = float(df["Low"].iloc[-1])
+    c1 = float(df["Close"].iloc[-2])
+    o1 = float(df["Open"].iloc[-2])
+    h1 = float(df["High"].iloc[-2])
+    l1 = float(df["Low"].iloc[-2])
 
-    rsi_s = _rsi(close)
-    bb_lower, bb_mid, bb_upper = _bollinger(close)
-
-    # ── Latest candle values ──
-    c  = float(close.iloc[-1])
-    o  = float(open_.iloc[-1])
-    h  = float(high.iloc[-1])
-    l  = float(low.iloc[-1])
-    c_prev = float(close.iloc[-2])
-    o_prev = float(open_.iloc[-2])
-
-    rsi_val      = float(rsi_s.iloc[-1])
-    rsi_prev     = float(rsi_s.iloc[-2])
-    bb_lo        = float(bb_lower.iloc[-1])
-    bb_lo_prev   = float(bb_lower.iloc[-2])
-
-    # Day change %
-    day_chg = (c - c_prev) / c_prev * 100
-
-    # ── Pattern 1: Hammer / Pin-bar ──────────────────────────────────────────
-    # Candle range
-    candle_range = h - l
-    body = abs(c - o)
-    lower_wick = min(c, o) - l          # how far price fell below the body
+    rng   = h - l
+    body  = abs(c - o)
+    lower_wick = min(c, o) - l
     upper_wick = h - max(c, o)
+    close_pos  = (c - l) / rng if rng > 0 else 0.5   # 0=bottom, 1=top
 
-    # Hammer: lower wick >= 2x body, closed in upper 40% of range, range > 0
-    hammer = False
-    if candle_range > 0 and body > 0:
-        lower_wick_ratio = lower_wick / candle_range
-        upper_wick_ratio = upper_wick / candle_range
-        close_position   = (c - l) / candle_range   # 0 = bottom, 1 = top
-        hammer = (
-            lower_wick >= 2 * body          # long lower wick
-            and lower_wick_ratio >= 0.40    # wick is at least 40% of range
-            and upper_wick_ratio <= 0.25    # small upper wick
-            and close_position >= 0.60      # closed in upper 40% of day's range
-        )
+    rsi_s   = _rsi(df["Close"])
+    rsi_val = float(rsi_s.iloc[-1])
+    rsi_1   = float(rsi_s.iloc[-2])
 
-    # ── Pattern 2: BB lower band touch + recovery ────────────────────────────
+    bb_lo   = float(_bb_lower(df["Close"]).iloc[-1])
+    support = float(df["Low"].rolling(min(120, len(df))).min().iloc[-1])
+
+    day_chg = (c - c1) / c1 * 100
+
+    # ── Pattern A: Hammer / Pin-bar ──
+    # Long lower wick, closed in top half, green candle preferred
+    hammer = bool(
+        rng > 0 and body > 0
+        and lower_wick >= 1.5 * body
+        and lower_wick / rng >= 0.35
+        and upper_wick / rng <= 0.30
+        and close_pos >= 0.55
+    )
+
+    # ── Pattern B: Bullish Engulfing ──
+    prev_red   = c1 < o1
+    today_green = c > o
+    engulfs    = o <= c1 and c >= o1
+    bullish_engulfing = bool(prev_red and today_green and engulfs)
+
+    # ── Pattern C: Bollinger Lower Band Reversal ──
     bb_reversal = bool(
-        l <= bb_lo * 1.005           # low touched or came within 0.5% of lower band
-        and c > bb_lo                # but closed above lower band
-        and c > c_prev               # and closed higher than yesterday
+        l <= bb_lo * 1.005
+        and c > bb_lo
+        and c > c1
     )
 
-    # ── Pattern 3: Near horizontal support (120-day rolling low) ─────────────
-    support_lookback = min(120, len(df))
-    horizontal_support = float(low.iloc[-support_lookback:].min())
-    near_support = abs(c - horizontal_support) / horizontal_support * 100 <= 2.0
+    # ── Pattern D: Support Bounce ──
+    near_support = bool(abs(c - support) / support * 100 <= 2.0)
 
-    # ── Pattern 4: RSI oversold bounce ───────────────────────────────────────
-    # RSI was oversold and is starting to turn, or just recovered above 30
-    rsi_bounce = bool(
-        rsi_val <= 38                # still low
-        and (rsi_val > rsi_prev or rsi_val <= 35)  # turning up or deeply oversold
-    )
-
-    score = sum([hammer, bb_reversal, near_support, rsi_bounce])
+    # ── Pattern E: RSI Oversold Bounce ──
+    rsi_bounce = bool(rsi_val <= 40 and (c > c1 or rsi_val <= 30))
 
     return {
-        "ticker":       ticker,
-        "close":        round(c, 2),
-        "day_chg%":     round(day_chg, 2),
-        "rsi14":        round(rsi_val, 1),
-        "bb_lower":     round(bb_lo, 2),
-        "support":      round(horizontal_support, 2),
-        "hammer":       hammer,
-        "bb_reversal":  bb_reversal,
-        "near_support": near_support,
-        "rsi_bounce":   rsi_bounce,
-        "score":        score,
-        "lower_wick%":  round(lower_wick / c * 100, 2) if c > 0 else 0,
-        "body%":        round(body / c * 100, 2) if c > 0 else 0,
+        "close": c, "open": o, "high": h, "low": l,
+        "day_chg%": round(day_chg, 2),
+        "rsi14": round(rsi_val, 1),
+        "bb_lower": round(bb_lo, 2),
+        "support": round(support, 2),
+        "lower_wick%": round(lower_wick / c * 100, 2) if c > 0 else 0,
+        "body%": round(body / c * 100, 2) if c > 0 else 0,
+        "close_pos%": round(close_pos * 100, 1),
+        "hammer":             hammer,
+        "bullish_engulfing":  bullish_engulfing,
+        "bb_reversal":        bb_reversal,
+        "near_support":       near_support,
+        "rsi_bounce":         rsi_bounce,
     }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 1: Analyze BSE.NS — find the pattern
+# ─────────────────────────────────────────────────────────────────────────────
+print("=" * 65)
+print("STEP 1 — Analyzing BSE Ltd. (BSE.NS)")
+print("=" * 65)
 
-# ── Step 0: BSE Ltd. stock (BSE.NS) ──────────────────────────────────────────
-print("=" * 60)
-print("STEP 0 — BSE Ltd. stock (BSE.NS) — today's candle")
-print("=" * 60)
+bse_df = yf.download("BSE.NS", period="6mo", interval="1d",
+                     auto_adjust=True, progress=False)
+bse_df = bse_df.dropna(how="all")
 
-bse_raw = yf.download("BSE.NS", period="120d", interval="1d",
-                      auto_adjust=True, progress=False)
-bse_raw = bse_raw.dropna(how="all")
-if len(bse_raw) >= 30:
-    r0 = analyze_reversal(bse_raw, "BSE.NS")
-    c0  = float(bse_raw["Close"].iloc[-1])
-    o0  = float(bse_raw["Open"].iloc[-1])
-    h0  = float(bse_raw["High"].iloc[-1])
-    l0  = float(bse_raw["Low"].iloc[-1])
-    c0p = float(bse_raw["Close"].iloc[-2])
-    print(f"\nBSE Ltd. (BSE.NS)")
-    print(f"  Open:  {o0:>10,.2f}   High:  {h0:>10,.2f}")
-    print(f"  Low:   {l0:>10,.2f}   Close: {c0:>10,.2f}   Change: {(c0-c0p)/c0p*100:+.2f}%")
-    if r0:
-        print(f"  RSI14: {r0['rsi14']:.1f}   BB_lower: {r0['bb_lower']:,.2f}   Support: {r0['support']:,.2f}")
-        print(f"  Lower wick: {r0['lower_wick%']:.2f}% of price   Body: {r0['body%']:.2f}% of price")
-        print(f"\n  Pattern detected today:")
-        print(f"    Hammer/Pin-bar:      {'YES ✓' if r0['hammer'] else 'no'}")
-        print(f"    BB lower reversal:   {'YES ✓' if r0['bb_reversal'] else 'no'}")
-        print(f"    Near support:        {'YES ✓' if r0['near_support'] else 'no'}")
-        print(f"    RSI oversold bounce: {'YES ✓' if r0['rsi_bounce'] else 'no'}")
-        print(f"  Reversal score: {r0['score']}/4")
-        if r0["hammer"]:
-            print(f"\n  *** HAMMER: Fell to {l0:,.0f} intraday but closed at {c0:,.0f}")
-            print(f"      Buyers stepped in — lower wick = {r0['lower_wick%']:.1f}% of price.")
-        if r0["bb_reversal"]:
-            print(f"  *** BB LOWER BAND REVERSAL: Touched {r0['bb_lower']:,.0f}, recovered to {c0:,.0f}.")
-        if r0["near_support"]:
-            print(f"  *** SUPPORT BOUNCE: Near 120-day support at {r0['support']:,.0f}.")
+if len(bse_df) < 30:
+    print("ERROR: Could not fetch BSE.NS data. Check internet connection.")
 else:
-    print("  Could not fetch BSE.NS data.")
+    p = detect_patterns(bse_df)
 
-# ── Step 1: Sensex / Nifty index context ─────────────────────────────────────
-print("\n" + "=" * 60)
-print("STEP 1 — Sensex & Nifty 50 index context today")
-print("=" * 60)
+    print(f"\nBSE Ltd. — last 5 days:")
+    print(bse_df[["Open","High","Low","Close"]].tail(5).round(2).to_string())
 
-idx_raw = yf.download(
-    tickers=INDEX_TICKERS,
-    period="60d", interval="1d",
-    group_by="ticker", auto_adjust=True,
-    threads=True, progress=False,
-)
+    print(f"\nToday's candle:")
+    print(f"  Open:       {p['open']:>10,.2f}")
+    print(f"  High:       {p['high']:>10,.2f}")
+    print(f"  Low:        {p['low']:>10,.2f}")
+    print(f"  Close:      {p['close']:>10,.2f}   ({p['day_chg%']:+.2f}%)")
+    print(f"  RSI(14):    {p['rsi14']}")
+    print(f"  BB lower:   {p['bb_lower']:>10,.2f}")
+    print(f"  Support:    {p['support']:>10,.2f}")
+    print(f"  Lower wick: {p['lower_wick%']:.2f}% of price")
+    print(f"  Body:       {p['body%']:.2f}% of price")
+    print(f"  Close pos:  {p['close_pos%']:.0f}% of day's range (100=at high)")
 
-for t in INDEX_TICKERS:
-    try:
-        df_idx = idx_raw[t].dropna(how="all") if len(INDEX_TICKERS) > 1 else idx_raw.dropna(how="all")
-        r = analyze_reversal(df_idx, t)
-        if r is None:
-            print(f"{t}: not enough data")
-            continue
+    print(f"\nPatterns fired on BSE.NS today:")
+    bse_patterns = {}
+    for pat in ["hammer","bullish_engulfing","bb_reversal","near_support","rsi_bounce"]:
+        fired = p[pat]
+        bse_patterns[pat] = fired
+        label = {
+            "hammer":            "Hammer / Pin-bar",
+            "bullish_engulfing": "Bullish Engulfing",
+            "bb_reversal":       "BB Lower Band Reversal",
+            "near_support":      "Near Horizontal Support",
+            "rsi_bounce":        "RSI Oversold Bounce",
+        }[pat]
+        print(f"  {'✓' if fired else '✗'}  {label}")
 
-        label = "BSE Sensex" if t == "^BSESN" else "Nifty 50"
-        c, o = float(df_idx["Close"].iloc[-1]), float(df_idx["Open"].iloc[-1])
-        h_val, l_val = float(df_idx["High"].iloc[-1]), float(df_idx["Low"].iloc[-1])
+    active_patterns = [p for p, v in bse_patterns.items() if v]
+    print(f"\n→ {len(active_patterns)} pattern(s) fired: {', '.join(active_patterns) if active_patterns else 'none'}")
 
-        print(f"\n{label} ({t})")
-        print(f"  Open:  {o:>10,.2f}   High:  {h_val:>10,.2f}")
-        print(f"  Low:   {l_val:>10,.2f}   Close: {c:>10,.2f}   Change: {r['day_chg%']:+.2f}%")
-        print(f"  RSI14: {r['rsi14']:.1f}   BB_lower: {r['bb_lower']:,.2f}")
-        print(f"  Lower wick: {r['lower_wick%']:.2f}% of close   Body: {r['body%']:.2f}% of close")
-        print(f"  Patterns detected:")
-        print(f"    Hammer/Pin-bar:      {'YES ✓' if r['hammer'] else 'no'}")
-        print(f"    BB lower reversal:   {'YES ✓' if r['bb_reversal'] else 'no'}")
-        print(f"    Near support:        {'YES ✓' if r['near_support'] else 'no'}")
-        print(f"    RSI oversold bounce: {'YES ✓' if r['rsi_bounce'] else 'no'}")
-        print(f"  Reversal score: {r['score']}/4")
+    if not active_patterns:
+        print("\nNo standard reversal pattern detected on BSE.NS today.")
+        print("Check if today was actually a down day or flat day for BSE stock.")
 
-        # Interpretation
-        if r["hammer"]:
-            print(f"\n  *** HAMMER CANDLE: Index fell hard intraday (lower wick {r['lower_wick%']:.1f}%")
-            print(f"      of price) but buyers stepped in — closed near top of day's range.")
-            print(f"      This is the SAME pattern to look for in individual stocks.")
-        if r["bb_reversal"]:
-            print(f"  *** BB LOWER BAND: Index dipped to/below lower Bollinger band and recovered.")
-        if r["near_support"]:
-            print(f"  *** SUPPORT BOUNCE: Index is near 120-day low support level.")
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 2: Find same patterns in all Nifty stocks
+# ─────────────────────────────────────────────────────────────────────────────
+print("\n" + "=" * 65)
+print(f"STEP 2 — Scanning {len(TICKERS)} stocks for same pattern(s)")
+print("=" * 65)
+print(f"Looking for: {', '.join(active_patterns) if active_patterns else 'all patterns'}\n")
 
-    except Exception as e:
-        print(f"{t}: error — {e}")
-
-# ── Step 2: Same pattern in individual stocks ─────────────────────────────────
-print("\n\n" + "=" * 60)
-print("STEP 2 — Same reversal pattern in Nifty stocks today")
-print("=" * 60)
-print(f"Downloading 60d history for {len(STOCK_TICKERS)} stocks...\n")
-
+print(f"Downloading data...")
 raw = yf.download(
-    tickers=STOCK_TICKERS,
-    period="60d", interval="1d",
+    tickers=TICKERS, period="6mo", interval="1d",
     group_by="ticker", auto_adjust=True,
     threads=True, progress=False,
 )
 
-results = []
-for ticker in STOCK_TICKERS:
+rows = []
+for ticker in TICKERS:
     try:
         df_t = raw[ticker].dropna(how="all")
-        r = analyze_reversal(df_t, ticker)
-        if r and r["score"] >= 1:
-            results.append(r)
+        r = detect_patterns(df_t)
+        if r is None:
+            continue
+        # Count how many of BSE's patterns this stock also shows
+        if active_patterns:
+            match_count = sum(r[pat] for pat in active_patterns)
+        else:
+            match_count = sum([r["hammer"], r["bullish_engulfing"],
+                               r["bb_reversal"], r["near_support"], r["rsi_bounce"]])
+        r["ticker"] = ticker
+        r["bse_pattern_match"] = match_count
+        rows.append(r)
     except Exception:
         continue
 
-if not results:
-    print("No data — check internet connection.")
+if not rows:
+    print("No data returned.")
 else:
-    df_res = (
-        pd.DataFrame(results)
-        .sort_values(["score", "day_chg%"], ascending=[False, False])
-        .reset_index(drop=True)
-    )
+    df_out = pd.DataFrame(rows).sort_values(
+        ["bse_pattern_match", "day_chg%"], ascending=[False, False]
+    ).reset_index(drop=True)
 
-    # ── Full table ──
-    display_cols = ["ticker","close","day_chg%","rsi14","score","hammer","bb_reversal","near_support","rsi_bounce","lower_wick%"]
-    print(df_res[display_cols].to_string(index=False))
+    display_cols = ["ticker","close","day_chg%","rsi14",
+                    "hammer","bullish_engulfing","bb_reversal","near_support","rsi_bounce",
+                    "bse_pattern_match"]
 
-    # ── Strong reversals (score >= 3) ──
-    strong = df_res[df_res["score"] >= 3]
-    print(f"\n{'='*60}")
-    print(f"STRONG REVERSALS — same pattern as BSE today (3-4/4 conditions): {len(strong)}")
-    if strong.empty:
-        print("  None today — check 2-score stocks above as next-best.")
-    else:
-        print(strong[display_cols].to_string(index=False))
-        print("\nThese stocks showed the SAME bullish reversal structure as BSE today:")
-        print("  • Hammer candle (sold off, recovered) OR")
-        print("  • Bollinger lower band touch + close above it OR")
-        print("  • Near key support bounce")
-        print("  • RSI oversold turning up")
+    print(f"\nAll {len(df_out)} stocks (sorted by pattern match):\n")
+    print(df_out[display_cols].to_string(index=False))
 
-    # ── Hammer-only subset ──
-    hammers = df_res[df_res["hammer"] == True].sort_values("lower_wick%", ascending=False)
-    print(f"\n{'='*60}")
-    print(f"HAMMER / PIN-BAR candles today (same candle as BSE showed): {len(hammers)}")
-    if hammers.empty:
-        print("  None today")
-    else:
-        print(hammers[["ticker","close","day_chg%","rsi14","lower_wick%","body%","score"]].to_string(index=False))
+    # Stocks showing the same pattern as BSE.NS
+    if active_patterns:
+        full_match = df_out[df_out["bse_pattern_match"] == len(active_patterns)]
+        partial    = df_out[df_out["bse_pattern_match"] == max(1, len(active_patterns) - 1)]
 
-    # ── BB reversals ──
-    bb_rev = df_res[df_res["bb_reversal"] == True].sort_values("day_chg%", ascending=False)
-    print(f"\n{'='*60}")
-    print(f"BOLLINGER LOWER BAND REVERSALS today: {len(bb_rev)}")
-    if bb_rev.empty:
-        print("  None today")
-    else:
-        print(bb_rev[["ticker","close","day_chg%","rsi14","bb_lower","score"]].to_string(index=False))
+        print(f"\n{'='*65}")
+        print(f"EXACT MATCH — same {len(active_patterns)} pattern(s) as BSE.NS: {len(full_match)} stocks")
+        if full_match.empty:
+            print("  None today")
+        else:
+            print(full_match[display_cols].to_string(index=False))
+
+        if len(active_patterns) > 1:
+            print(f"\nNEAR MATCH — {len(active_patterns)-1}/{len(active_patterns)} patterns: {len(partial)} stocks")
+            if partial.empty:
+                print("  None today")
+            else:
+                print(partial[display_cols].to_string(index=False))
 
 print("\nDone.")
