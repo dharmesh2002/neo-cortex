@@ -13,6 +13,7 @@ from .backtest_support_zone_mtf import run_backtest as run_backtest_mtf
 from .backtest_decline_reversal import run_backtest as run_backtest_decline_reversal
 from .backtest_support_zone_rr import run_backtest as run_backtest_rr
 from .bounce_fundamentals_strategy import run_bounce_fundamentals_screen
+from .confluence_signal_strategy import run_confluence_signal_screen
 from .buffett_strategy import run_buffett_relaxed_screen, run_buffett_screen
 from .decline_reversal_strategy import (
     NEAR_MISS_TOLERANCE_PCT as NEAR_MISS_TOLERANCE_PCT_DR,
@@ -1024,6 +1025,79 @@ def _build_market_breadth_markdown_report(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _format_confluence_signal(rows: list) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    cols = [
+        "ticker", "company", "sector", "industry", "close",
+        "sma200", "fib618", "horizontal_support", "rsi14", "avg_daily_value_cr",
+        "near_support", "near_sma200", "near_fib618", "rsi_oversold", "bullish_engulfing",
+    ]
+    df = df[[c for c in cols if c in df.columns]]
+    for col in ["close", "sma200", "fib618", "horizontal_support", "rsi14", "avg_daily_value_cr"]:
+        if col in df.columns:
+            df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _format_confluence_near_miss(rows: list) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    cols = [
+        "ticker", "company", "sector", "industry", "close",
+        "sma200", "fib618", "horizontal_support", "rsi14", "avg_daily_value_cr",
+        "conditions_met", "missing",
+    ]
+    df = df[[c for c in cols if c in df.columns]]
+    for col in ["close", "sma200", "fib618", "horizontal_support", "rsi14", "avg_daily_value_cr"]:
+        if col in df.columns:
+            df[col] = df[col].astype(float).round(2)
+    return df
+
+
+def _build_confluence_signal_markdown_report(signals_df: pd.DataFrame,
+                                              near_miss_df: pd.DataFrame,
+                                              universe_size: int,
+                                              history_fetched: int) -> str:
+    today = date.today().isoformat()
+    lines = [
+        f"# Confluence Signal Screener — {today}",
+        "",
+        f"Universe: {universe_size} tickers (price history fetched for {history_fetched}).",
+        "",
+        f"## Full signals — all 5 conditions met ({len(signals_df)})",
+        "",
+    ]
+    if signals_df.empty:
+        lines.append("No full confluence signals today.")
+    else:
+        lines.append(signals_df.to_markdown(index=False))
+    lines += [
+        "",
+        f"## Near-miss watchlist — 4 of 5 conditions met ({len(near_miss_df)})",
+        "",
+    ]
+    if near_miss_df.empty:
+        lines.append("No near-misses today.")
+    else:
+        lines.append(near_miss_df.to_markdown(index=False))
+    lines += [
+        "",
+        "---",
+        "Confluence signal: five conditions must align simultaneously — (1) close within "
+        "2% of a key horizontal support (120-day rolling low), (2) close within 2% of the "
+        "200-day SMA, (3) close within 2% of the 61.8% Fibonacci retracement of the prior "
+        "252-day high-low range (H - 0.618*(H - L)), (4) RSI(14) <= 35 (oversold), "
+        "(5) bullish engulfing candle (prior candle is red, today's candle is green and its "
+        "body fully covers the prior body). Standing liquidity filter (>= Rs 20cr/day) and "
+        "sector/industry exclusion rules apply. Near-miss shows stocks where 4 of 5 align. "
+        "This strategy has NOT been backtested. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="NSE screener: Bollinger Band bounce + RSI bounce + volume confirmation "
@@ -1035,7 +1109,7 @@ def main():
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
                                  "bounce-fundamentals", "decline-reversal",
                                  "backtest-decline-reversal", "buffett", "buffett-relaxed",
-                                 "breadth"],
+                                 "breadth", "confluence-signal"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -1084,7 +1158,14 @@ def main():
                              "decliners, average move by market-cap segment and by sector, "
                              "top 10 gainers/losers. No exclusions, no fundamentals gate, no "
                              "technical zone -- the whole-market baseline every other "
-                             "strategy here is measured against.")
+                             "strategy here is measured against. "
+                             "'confluence-signal': high-conviction reversal signal requiring "
+                             "all five conditions simultaneously -- price at horizontal "
+                             "support (within 2% of the 120-day rolling low), at the "
+                             "200-day MA (within 2%), at the 61.8%% Fibonacci retracement "
+                             "of the prior 252-day range (within 2%%), RSI(14) <= 35 "
+                             "(oversold), and a bullish engulfing candle. Near-miss watchlist "
+                             "shows stocks where 4 of 5 conditions align.")
     parser.add_argument("--tickers", type=str, default="",
                         help="Comma-separated NSE tickers (with .NS suffix) for "
                              "--strategy fundamentals or levels, e.g. 'INFY.NS,TCS.NS'.")
@@ -1461,6 +1542,34 @@ def main():
                 result["technical_candidates"]))
         print(f"\nSaved: {matches_path}")
         print(f"Saved: {rejected_path}")
+        print(f"Saved: {report_path}")
+        return
+
+    if args.strategy == "confluence-signal":
+        result = run_confluence_signal_screen(
+            csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)
+        signals_df = _format_confluence_signal(result["signals"])
+        near_miss_df = _format_confluence_near_miss(result["near_miss"])
+
+        print(f"\nUniverse: {result['universe_size']} tickers "
+              f"(price history fetched for {result['history_fetched']})\n")
+
+        print(f"=== CONFLUENCE SIGNALS — all 5 conditions ({len(signals_df)}) ===")
+        print(signals_df.to_string(index=False) if not signals_df.empty else "No signals today.")
+
+        print(f"\n=== NEAR-MISS WATCHLIST — 4 of 5 conditions ({len(near_miss_df)}) ===")
+        print(near_miss_df.to_string(index=False) if not near_miss_df.empty else "No near-misses today.")
+
+        signals_path = os.path.join(args.output_dir, f"confluence_signal_{today}.csv")
+        near_miss_path = os.path.join(args.output_dir, f"confluence_signal_near_miss_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"confluence_signal_report_{today}.md")
+        signals_df.to_csv(signals_path, index=False)
+        near_miss_df.to_csv(near_miss_path, index=False)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_confluence_signal_markdown_report(
+                signals_df, near_miss_df, result["universe_size"], result["history_fetched"]))
+        print(f"\nSaved: {signals_path}")
+        print(f"Saved: {near_miss_path}")
         print(f"Saved: {report_path}")
         return
 
