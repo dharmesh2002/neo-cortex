@@ -44,7 +44,7 @@ def reviewer_node(state: MedicalReportState) -> dict:
             base_url="https://integrate.api.nvidia.com/v1",
             api_key=os.environ.get("NVIDIA_API_KEY", ""),
         )
-        model = os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3-8b-chat-sft-rlhf")
+        model = os.environ.get("NVIDIA_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
 
         analyses_json = json.dumps(state.get("specialist_analyses", []), indent=2)
         prompt = _REVIEW_PROMPT.format(
