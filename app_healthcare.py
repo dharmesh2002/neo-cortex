@@ -77,10 +77,15 @@ async def analyze_report(
 
     loop = asyncio.get_event_loop()
     try:
-        final_state = await loop.run_in_executor(
-            _executor,
-            lambda: healthcare_graph.invoke(initial, {"recursion_limit": 30}),
+        final_state = await asyncio.wait_for(
+            loop.run_in_executor(
+                _executor,
+                lambda: healthcare_graph.invoke(initial, {"recursion_limit": 30}),
+            ),
+            timeout=180.0,
         )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Analysis timed out after 3 minutes. The AI APIs may be overloaded — please try again.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline error: {e}")
 
