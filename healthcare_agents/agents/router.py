@@ -6,13 +6,7 @@ from ..state import MedicalReportState
 
 SPECIALISTS = {
     "orthopedic": "Bones, joints, spine, fractures, musculoskeletal conditions",
-    "gynecology": "Female reproductive health, pregnancy, menstrual disorders, ovarian/uterine conditions",
     "cardiology": "Heart, blood pressure, cholesterol, ECG/EKG, cardiovascular conditions",
-    "neurology": "Brain, nervous system, headache, stroke, seizure, neurological disorders",
-    "pulmonology": "Lungs, respiratory, breathing disorders, asthma, COPD, chest X-ray findings",
-    "gastroenterology": "Digestive system, liver function, stomach, bowel, GI tract conditions",
-    "endocrinology": "Diabetes, thyroid disorders, hormones, insulin, metabolic conditions",
-    "general_medicine": "General health assessment, multi-system findings, or unspecified conditions",
 }
 
 _ROUTER_PROMPT = """You are a medical report triage specialist. Analyze the patient report and decide which specialist(s) should review it.
@@ -32,7 +26,7 @@ Respond with ONLY valid JSON (no markdown, no extra text):
 Rules:
 - Select 1–3 most relevant specialists using EXACT keys from the list above
 - Order by relevance (most relevant first)
-- Default to general_medicine when uncertain
+- Default to orthopedic when uncertain
 """
 
 
@@ -58,16 +52,16 @@ def router_node(state: MedicalReportState) -> dict:
 
         valid = [s for s in result.get("specialists", []) if s in SPECIALISTS]
         if not valid:
-            valid = ["general_medicine"]
+            valid = ["orthopedic"]
 
         return {
             "specialists_needed": valid,
-            "routing_reasoning": result.get("reasoning", "Default routing to general medicine"),
+            "routing_reasoning": result.get("reasoning", "Default routing to orthopedic"),
         }
 
     except Exception as e:
         return {
-            "specialists_needed": ["general_medicine"],
-            "routing_reasoning": f"Routing failed ({e}) — defaulting to general medicine",
+            "specialists_needed": ["orthopedic"],
+            "routing_reasoning": f"Routing failed ({e}) — defaulting to orthopedic",
             "errors": [f"Router error: {e}"],
         }

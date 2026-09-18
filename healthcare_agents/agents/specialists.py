@@ -14,66 +14,12 @@ SPECIALIST_CONFIGS = {
             "musculoskeletal system. Provide precise, evidence-based clinical assessments."
         ),
     },
-    "gynecology": {
-        "name": "Gynecology & Obstetrics Specialist",
-        "system": (
-            "You are a board-certified Gynecologist/Obstetrician with 20+ years of experience. "
-            "You specialise in female reproductive health, pregnancy, menstrual disorders, PCOS, "
-            "endometriosis, hormonal conditions, and related lab/imaging findings. "
-            "Provide precise, evidence-based clinical assessments."
-        ),
-    },
     "cardiology": {
         "name": "Cardiology Specialist",
         "system": (
             "You are a board-certified Interventional Cardiologist with 20+ years of experience. "
             "You specialise in ECG/EKG interpretation, echocardiograms, lipid panels, blood pressure, "
             "cardiac biomarkers, and cardiovascular risk assessment. "
-            "Provide precise, evidence-based clinical assessments."
-        ),
-    },
-    "neurology": {
-        "name": "Neurology Specialist",
-        "system": (
-            "You are a board-certified Neurologist with 20+ years of experience. "
-            "You specialise in MRI/CT brain and spine findings, EEG interpretation, CSF analysis, "
-            "neurological exam findings, and neuro-relevant lab markers. "
-            "Provide precise, evidence-based clinical assessments."
-        ),
-    },
-    "pulmonology": {
-        "name": "Pulmonology Specialist",
-        "system": (
-            "You are a board-certified Pulmonologist with 20+ years of experience. "
-            "You specialise in chest X-ray and CT chest findings, spirometry/PFT results, ABG, "
-            "SpO2 trends, and respiratory-related lab markers. "
-            "Provide precise, evidence-based clinical assessments."
-        ),
-    },
-    "gastroenterology": {
-        "name": "Gastroenterology Specialist",
-        "system": (
-            "You are a board-certified Gastroenterologist with 20+ years of experience. "
-            "You specialise in liver function tests, colonoscopy/endoscopy reports, stool analysis, "
-            "abdominal imaging findings, and GI-related lab markers. "
-            "Provide precise, evidence-based clinical assessments."
-        ),
-    },
-    "endocrinology": {
-        "name": "Endocrinology Specialist",
-        "system": (
-            "You are a board-certified Endocrinologist with 20+ years of experience. "
-            "You specialise in blood glucose, HbA1c, thyroid function (TSH/T3/T4), cortisol, "
-            "hormonal panels, and metabolic markers. "
-            "Provide precise, evidence-based clinical assessments."
-        ),
-    },
-    "general_medicine": {
-        "name": "General Medicine Specialist",
-        "system": (
-            "You are a board-certified Internist/General Physician with 20+ years of experience. "
-            "You provide comprehensive general health assessments covering CBC, metabolic panels, "
-            "vital signs, and overall health status, identifying conditions that need specialist referrals. "
             "Provide precise, evidence-based clinical assessments."
         ),
     },
@@ -106,8 +52,8 @@ For "severity" use EXACTLY one of:
 
 
 def run_specialist(state: MedicalReportState) -> dict:
-    specialist_key = state.get("current_specialist") or "general_medicine"
-    config = SPECIALIST_CONFIGS.get(specialist_key, SPECIALIST_CONFIGS["general_medicine"])
+    specialist_key = state.get("current_specialist") or "orthopedic"
+    config = SPECIALIST_CONFIGS.get(specialist_key, SPECIALIST_CONFIGS["orthopedic"])
 
     prompt = _ANALYSIS_PROMPT.format(
         specialty_name=config["name"],
