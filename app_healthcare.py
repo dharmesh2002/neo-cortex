@@ -91,8 +91,6 @@ async def analyze_report(
             "reasoning": final_state.get("routing_reasoning", ""),
         },
         "specialist_analyses": final_state.get("specialist_analyses", []),
-        "aws_validation": final_state.get("aws_validation"),
-        "aws_validation_success": final_state.get("aws_validation_success", False),
         "final_report": final_state.get("final_report", ""),
         "errors": final_state.get("errors", []),
     })
