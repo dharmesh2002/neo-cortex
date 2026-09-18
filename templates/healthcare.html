@@ -105,7 +105,7 @@
     .fg li::before{content:'•';color:var(--p);flex-shrink:0}
     .fu-note{font-size:.78rem;color:var(--orange);margin-top:.65rem}
 
-    /* AWS card */
+    /* NVIDIA card */
     .aws-wrap{border-left-color:var(--purple)!important}
     .aws-head{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem}
     .conf-bar{flex:1;min-width:160px}
@@ -126,7 +126,7 @@
 
 <header>
   <h1>🧠 NeoCortex Healthcare AI</h1>
-  <p>Multi-specialist LangGraph pipeline — Claude specialists + AWS Bedrock validation</p>
+  <p>Orthopedic &amp; Cardiology LangGraph pipeline — Gemini specialists + NVIDIA Nemotron review</p>
 </header>
 
 <div class="wrap">
@@ -178,9 +178,9 @@
       <div id="sp-container"></div>
     </div>
 
-    <!-- AWS Validation -->
+    <!-- NVIDIA Review -->
     <div class="card sp-card aws-wrap">
-      <div class="card-title" style="color:var(--purple)">☁️ AWS Bedrock Validation</div>
+      <div class="card-title" style="color:var(--purple)">🟢 NVIDIA Nemotron — Independent Review</div>
       <div id="aws-body"></div>
     </div>
 
@@ -202,13 +202,7 @@ const STEPS = [
   {id:'s-route', label:'🔀 Routing to specialists'},
   {id:'s-orth',  label:'🦴 Orthopedic analysis'},
   {id:'s-card',  label:'❤️  Cardiology analysis'},
-  {id:'s-neuro', label:'🧠 Neurology analysis'},
-  {id:'s-gynec', label:'👩‍⚕️ Gynecology analysis'},
-  {id:'s-pul',   label:'🫁 Pulmonology analysis'},
-  {id:'s-gastro',label:'🔬 Gastroenterology analysis'},
-  {id:'s-endo',  label:'⚗️  Endocrinology analysis'},
-  {id:'s-gen',   label:'👨‍⚕️ General medicine analysis'},
-  {id:'s-aws',   label:'☁️  AWS Bedrock validation'},
+  {id:'s-nvidia',label:'🟢 NVIDIA Nemotron review'},
   {id:'s-final', label:'📋 Assembling final report'},
 ];
 
@@ -326,42 +320,45 @@ function renderResults(d) {
       </div>`;
   }
 
-  // AWS
-  const aws = d.aws_validation;
+  // NVIDIA Review
+  const nv = d.nvidia_review;
   const awsEl = document.getElementById('aws-body');
-  if (aws && aws.validation_status !== 'unavailable') {
-    const conf = Math.round(+(aws.confidence_score||0)*100);
-    const st = aws.validation_status || 'N/A';
-    const stClass = st === 'approved' ? 'r-routine' : st === 'requires_specialist_review' ? 'r-urgent' : 'r-routine';
+  if (nv && nv.review_status !== 'unavailable') {
+    const conf = Math.round(+(nv.confidence_score||0)*100);
+    const st = nv.review_status || 'N/A';
+    const stClass = st === 'approved' ? 'r-routine' : st === 'requires_re_evaluation' ? 'r-critical' : 'r-urgent';
     awsEl.innerHTML = `
       <div class="aws-head">
-        <span class="badge ${stClass}">${st}</span>
+        <span class="badge ${stClass}">${st.replace(/_/g,' ')}</span>
         <div class="conf-bar">
           <label>Confidence: ${conf}%</label>
           <div class="bar-bg"><div class="bar-fill" style="width:${conf}%"></div></div>
         </div>
       </div>
       <p style="font-size:.875rem;margin-bottom:.65rem">
-        <strong>Overall Recommendation:</strong> ${aws.overall_recommendation||'N/A'}
+        <strong>Urgency:</strong> ${(nv.overall_urgency||'N/A').toUpperCase()}
       </p>
-      ${(aws.cross_specialist_findings||[]).length ? `<div class="fg" style="margin-bottom:.5rem">
-        <h4>🔗 Cross-Specialist Findings</h4>
-        <ul>${(aws.cross_specialist_findings||[]).map(f=>`<li>${f}</li>`).join('')}</ul>
+      <p style="font-size:.875rem;margin-bottom:.65rem">
+        <strong>Summary:</strong> ${nv.overall_summary||'N/A'}
+      </p>
+      ${(nv.agreements||[]).length ? `<div class="fg" style="margin-bottom:.5rem">
+        <h4>✅ Agreements</h4>
+        <ul>${(nv.agreements||[]).map(f=>`<li>${f}</li>`).join('')}</ul>
       </div>` : ''}
-      ${(aws.conflicts_identified||[]).filter(Boolean).length ? `<div class="fg" style="margin-bottom:.5rem">
-        <h4>⚡ Conflicts</h4>
-        <ul>${(aws.conflicts_identified||[]).map(f=>`<li>${f}</li>`).join('')}</ul>
+      ${(nv.disagreements||[]).filter(Boolean).length ? `<div class="fg" style="margin-bottom:.5rem">
+        <h4>⚠️ Disagreements</h4>
+        <ul>${(nv.disagreements||[]).map(f=>`<li>${f}</li>`).join('')}</ul>
       </div>` : ''}
-      ${(aws.missed_considerations||[]).filter(Boolean).length ? `<div class="fg">
-        <h4>➕ Additional Considerations</h4>
-        <ul>${(aws.missed_considerations||[]).map(f=>`<li>${f}</li>`).join('')}</ul>
+      ${(nv.missed_findings||[]).filter(Boolean).length ? `<div class="fg">
+        <h4>➕ Missed Findings</h4>
+        <ul>${(nv.missed_findings||[]).map(f=>`<li>${f}</li>`).join('')}</ul>
       </div>` : ''}
       <p style="font-size:.72rem;color:var(--muted);margin-top:.65rem">
-        Validated by: ${aws.validated_by||'AWS Bedrock'}
+        Reviewed by: ${nv.reviewed_by||'NVIDIA Nemotron'}
       </p>`;
   } else {
     awsEl.innerHTML = `<p style="color:var(--muted);font-size:.875rem">
-      ⚠️ AWS validation unavailable${aws?.error ? ': ' + aws.error : ''}.
+      ⚠️ NVIDIA review unavailable${nv?.error ? ': ' + nv.error : ''}.
       Specialist analyses above remain valid.</p>`;
   }
 
