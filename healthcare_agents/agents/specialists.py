@@ -1,7 +1,9 @@
 import json
+import os
 import re
 
-import anthropic
+from google import genai
+from google.genai import types
 
 from ..state import MedicalReportState
 
@@ -106,39 +108,44 @@ For "severity" use EXACTLY one of:
 """
 
 
+def _client():
+    return genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
+
+
+def _model_name():
+    return os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+
+
 def run_specialist(state: MedicalReportState) -> dict:
     specialist_key = state.get("current_specialist") or "general_medicine"
     config = SPECIALIST_CONFIGS.get(specialist_key, SPECIALIST_CONFIGS["general_medicine"])
-    client = anthropic.Anthropic()
 
-    user_content = []
+    contents = []
 
-    # Forward image to vision-capable analysis
     b64 = state.get("patient_report_b64")
     media_type = state.get("file_media_type", "")
     if b64 and media_type.startswith("image/"):
-        user_content.append({
-            "type": "image",
-            "source": {"type": "base64", "media_type": media_type, "data": b64},
-        })
+        import base64
+        contents.append(types.Part.from_bytes(
+            data=base64.b64decode(b64),
+            mime_type=media_type,
+        ))
 
-    user_content.append({
-        "type": "text",
-        "text": _ANALYSIS_PROMPT.format(
-            specialty_name=config["name"],
-            report=state["patient_report_text"][:12000],
-        ),
-    })
+    contents.append(_ANALYSIS_PROMPT.format(
+        specialty_name=config["name"],
+        report=state["patient_report_text"][:12000],
+    ))
 
     try:
-        response = client.messages.create(
-            model="claude-opus-5",
-            max_tokens=4096,
-            system=config["system"],
-            messages=[{"role": "user", "content": user_content}],
+        client = _client()
+        response = client.models.generate_content(
+            model=_model_name(),
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=config["system"],
+            ),
         )
-
-        raw = response.content[0].text.strip()
+        raw = response.text.strip()
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         if m:
             raw = m.group()
