@@ -1,23 +1,23 @@
 import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 load_dotenv()
 
 app = FastAPI(title="NeoCortex Healthcare AI", version="1.0.0")
-templates = Jinja2Templates(directory="templates")
 _executor = ThreadPoolExecutor(max_workers=4)
+_html = Path(__file__).parent / "templates" / "healthcare.html"
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse("healthcare.html", {"request": request})
+async def index():
+    return FileResponse(_html)
 
 
 @app.post("/api/analyze")
