@@ -59,6 +59,7 @@ def reviewer_node(state: MedicalReportState) -> dict:
                 {"role": "user", "content": prompt},
             ],
             max_tokens=2048,
+            timeout=60,
         )
 
         raw = response.choices[0].message.content.strip()

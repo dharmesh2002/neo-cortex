@@ -160,6 +160,9 @@
     <h3 style="color:var(--pd)">Consulting specialists…</h3>
     <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Usually 30–90 seconds</p>
     <div class="steps" id="steps"></div>
+    <p id="wait-msg" style="display:none;margin-top:1rem;font-size:.82rem;color:var(--orange)">
+      ⏳ Still processing — NVIDIA review can take up to 2 minutes. Please wait…
+    </p>
   </div>
 
   <!-- Results -->
@@ -249,11 +252,16 @@ async function startAnalysis() {
   document.getElementById('results').style.display = 'none';
 
   stepIdx = 0;
+  document.getElementById('wait-msg').style.display = 'none';
   activateStep(0);
   stepTimer = setInterval(() => {
-    if (stepIdx < STEPS.length - 1) activateStep(++stepIdx);
-    else clearInterval(stepTimer);
-  }, 5500);
+    if (stepIdx < STEPS.length - 1) {
+      activateStep(++stepIdx);
+    } else {
+      clearInterval(stepTimer);
+      document.getElementById('wait-msg').style.display = 'block';
+    }
+  }, 8000);
 
   const fd = new FormData();
   if (selFile) fd.append('report_file', selFile);
@@ -262,6 +270,7 @@ async function startAnalysis() {
   try {
     const r = await fetch('/api/analyze', { method: 'POST', body: fd });
     clearInterval(stepTimer);
+    document.getElementById('wait-msg').style.display = 'none';
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Analysis failed'); }
     renderResults(await r.json());
   } catch (e) {
