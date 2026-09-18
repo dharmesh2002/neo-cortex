@@ -44,8 +44,8 @@ async def analyze_report(
         "routing_reasoning": "",
         "current_specialist": None,
         "specialist_analyses": [],
-        "aws_validation": None,
-        "aws_validation_success": False,
+        "nvidia_review": None,
+        "nvidia_review_success": False,
         "final_report": None,
         "errors": [],
     }
@@ -91,6 +91,8 @@ async def analyze_report(
             "reasoning": final_state.get("routing_reasoning", ""),
         },
         "specialist_analyses": final_state.get("specialist_analyses", []),
+        "nvidia_review": final_state.get("nvidia_review"),
+        "nvidia_review_success": final_state.get("nvidia_review_success", False),
         "final_report": final_state.get("final_report", ""),
         "errors": final_state.get("errors", []),
     })

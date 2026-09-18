@@ -1,12 +1,12 @@
-from typing import Annotated, Any, Dict, List, Optional, TypedDict
 import operator
+from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
 
 class MedicalReportState(TypedDict):
     # Input
     patient_report_text: str
-    patient_report_b64: Optional[str]    # base64-encoded image/PDF
-    file_media_type: Optional[str]        # e.g. "image/jpeg"
+    patient_report_b64: Optional[str]
+    file_media_type: Optional[str]
     original_filename: Optional[str]
 
     # Router output
@@ -16,15 +16,15 @@ class MedicalReportState(TypedDict):
     # Set per parallel Send execution
     current_specialist: Optional[str]
 
-    # Accumulated from parallel specialist nodes (operator.add = append)
+    # Accumulated from parallel specialist nodes
     specialist_analyses: Annotated[List[Dict[str, Any]], operator.add]
 
-    # AWS Bedrock validation
-    aws_validation: Optional[Dict[str, Any]]
-    aws_validation_success: bool
+    # NVIDIA Nemotron review
+    nvidia_review: Optional[Dict[str, Any]]
+    nvidia_review_success: bool
 
     # Final assembled report
     final_report: Optional[str]
 
-    # Error log (operator.add = append)
+    # Error log
     errors: Annotated[List[str], operator.add]
