@@ -11,6 +11,7 @@ def call_llm(prompt: str, system: str = None, image_b64: str = None, image_media
 
 
 def _call_gemini(prompt: str, system: str = None, image_b64: str = None, image_media_type: str = None) -> str:
+    import time
     from google import genai
     from google.genai import types
 
@@ -24,8 +25,18 @@ def _call_gemini(prompt: str, system: str = None, image_b64: str = None, image_m
     contents.append(prompt)
 
     config = types.GenerateContentConfig(system_instruction=system) if system else None
-    response = client.models.generate_content(model=model, contents=contents, config=config)
-    return response.text
+
+    for attempt in range(4):
+        try:
+            response = client.models.generate_content(model=model, contents=contents, config=config)
+            return response.text
+        except Exception as e:
+            if "503" in str(e) or "UNAVAILABLE" in str(e):
+                if attempt < 3:
+                    time.sleep(5 * (attempt + 1))  # wait 5s, 10s, 15s
+                    continue
+            raise
+    raise Exception("Gemini model unavailable after 4 attempts. Please try again later.")
 
 
 def _call_nvidia(prompt: str, system: str = None) -> str:
