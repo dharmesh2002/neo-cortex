@@ -1,10 +1,7 @@
 import json
-import os
 import re
 
-from google import genai
-from google.genai import types
-
+from ..llm import call_llm
 from ..state import MedicalReportState
 
 SPECIALISTS = {
@@ -39,14 +36,6 @@ Rules:
 """
 
 
-def _client():
-    return genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
-
-
-def _model_name():
-    return os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
-
-
 def router_node(state: MedicalReportState) -> dict:
     specialists_str = "\n".join(f"  {k}: {v}" for k, v in SPECIALISTS.items())
     prompt = _ROUTER_PROMPT.format(
@@ -54,26 +43,14 @@ def router_node(state: MedicalReportState) -> dict:
         report=state["patient_report_text"][:8000],
     )
 
-    contents = []
-
-    b64 = state.get("patient_report_b64")
-    media_type = state.get("file_media_type", "")
-    if b64 and media_type.startswith("image/"):
-        import base64
-        contents.append(types.Part.from_bytes(
-            data=base64.b64decode(b64),
-            mime_type=media_type,
-        ))
-
-    contents.append(prompt)
-
     try:
-        client = _client()
-        response = client.models.generate_content(
-            model=_model_name(),
-            contents=contents,
-        )
-        raw = response.text.strip()
+        raw = call_llm(
+            prompt=prompt,
+            system="You are a medical report triage specialist.",
+            image_b64=state.get("patient_report_b64"),
+            image_media_type=state.get("file_media_type", ""),
+        ).strip()
+
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         if m:
             raw = m.group()
