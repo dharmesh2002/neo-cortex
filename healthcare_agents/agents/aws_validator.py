@@ -49,7 +49,7 @@ def _client():
 
 
 def _model_name():
-    return os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    return os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
 
 def aws_validator_node(state: MedicalReportState) -> dict:
