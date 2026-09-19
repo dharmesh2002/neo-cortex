@@ -9,6 +9,13 @@ class MedicalReportState(TypedDict):
     file_media_type: Optional[str]
     original_filename: Optional[str]
 
+    # GP assessment (CrewAI stage)
+    gp_assessment: Optional[Dict[str, Any]]
+    gp_resolved: bool
+    gp_referral: Optional[str]   # pre-seeds router when GP refers
+    gp_notes: str                # GP reasoning passed to specialists
+    pipeline_used: str           # "crewai" | "langgraph" | "hybrid"
+
     # Router output
     specialists_needed: List[str]
     routing_reasoning: str

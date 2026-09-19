@@ -126,7 +126,7 @@
 
 <header>
   <h1>🧠 NeoCortex Healthcare AI</h1>
-  <p>Orthopedic &amp; Cardiology LangGraph pipeline — Gemini specialists + NVIDIA Nemotron review</p>
+  <p>Hybrid pipeline — CrewAI GP triage (Gemini) · LangGraph specialists (NVIDIA Nemotron review)</p>
 </header>
 
 <div class="wrap">
@@ -157,8 +157,8 @@
   <!-- Loading -->
   <div class="card" id="loading">
     <div class="spin"></div>
-    <h3 style="color:var(--pd)">Consulting specialists…</h3>
-    <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">Usually 30–90 seconds</p>
+    <h3 style="color:var(--pd)">Analyzing report…</h3>
+    <p style="color:var(--muted);margin-top:.4rem;font-size:.85rem">GP triage first, then specialists if needed · 30–120 seconds</p>
     <div class="steps" id="steps"></div>
     <p id="wait-msg" style="display:none;margin-top:1rem;font-size:.82rem;color:var(--orange)">
       ⏳ Still processing — NVIDIA review can take up to 2 minutes. Please wait…
@@ -168,21 +168,33 @@
   <!-- Results -->
   <div id="results">
 
+    <!-- Pipeline badge -->
+    <div class="card" id="pipeline-card">
+      <div class="card-title">🔁 Pipeline Used</div>
+      <div id="pipeline-badge"></div>
+    </div>
+
+    <!-- GP Assessment -->
+    <div class="card" id="gp-card">
+      <div class="card-title">👨‍⚕️ General Physician Assessment <small style="font-weight:400;color:var(--muted)">(CrewAI + Gemini)</small></div>
+      <div id="gp-body"></div>
+    </div>
+
     <!-- Routing -->
-    <div class="card">
+    <div class="card" id="routing-card">
       <div class="card-title">🔀 Routing Decision</div>
       <div id="routing-tags"></div>
       <p style="font-size:.84rem;color:var(--muted);margin-top:.5rem" id="routing-reason"></p>
     </div>
 
     <!-- Specialist analyses -->
-    <div class="card">
-      <div class="card-title">👨‍⚕️ Specialist Analyses</div>
+    <div class="card" id="sp-card-wrap">
+      <div class="card-title">🔬 Specialist Analyses <small style="font-weight:400;color:var(--muted)">(LangGraph + Gemini)</small></div>
       <div id="sp-container"></div>
     </div>
 
     <!-- NVIDIA Review -->
-    <div class="card sp-card aws-wrap">
+    <div class="card sp-card aws-wrap" id="nvidia-card">
       <div class="card-title" style="color:var(--purple)">🟢 NVIDIA Nemotron — Independent Review</div>
       <div id="aws-body"></div>
     </div>
@@ -202,9 +214,9 @@
 
 <script>
 const STEPS = [
-  {id:'s-route', label:'🔀 Routing to specialists'},
-  {id:'s-orth',  label:'🦴 Orthopedic analysis'},
-  {id:'s-card',  label:'❤️  Cardiology analysis'},
+  {id:'s-gp',    label:'👨‍⚕️ GP Assessment (CrewAI + Gemini)'},
+  {id:'s-route', label:'🔀 Routing decision'},
+  {id:'s-spec',  label:'🔬 Specialist analysis (LangGraph)'},
   {id:'s-nvidia',label:'🟢 NVIDIA Nemotron review'},
   {id:'s-final', label:'📋 Assembling final report'},
 ];
@@ -302,9 +314,53 @@ function renderResults(d) {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('results').style.display = 'block';
 
+  const pipeline = d.pipeline_used || 'langgraph';
+  const isCrewAIOnly = pipeline === 'crewai';
+
+  // Pipeline badge
+  const pipelineColors = { crewai: '#38a169', langgraph: '#6b46c1', hybrid: '#0a7b8e' };
+  const pipelineLabels = {
+    crewai: '✅ CrewAI only — GP resolved the case (no specialist referral)',
+    langgraph: '🔬 LangGraph — specialist pipeline',
+    hybrid: '🔀 Hybrid — GP triaged → LangGraph specialists',
+  };
+  document.getElementById('pipeline-badge').innerHTML =
+    `<span class="badge" style="background:${pipelineColors[pipeline]}20;color:${pipelineColors[pipeline]};border:1px solid ${pipelineColors[pipeline]}40;font-size:.8rem;padding:.3rem .8rem">
+      ${pipelineLabels[pipeline] || pipeline}
+    </span>`;
+
+  // GP Assessment
+  const gp = d.gp_assessment;
+  const gpEl = document.getElementById('gp-body');
+  if (gp) {
+    const conf = Math.round(+(gp.confidence || 0) * 100);
+    const urg = (gp.urgency || 'routine').toLowerCase();
+    const urgClass = urg === 'critical' ? 'r-critical' : urg === 'urgent' ? 'r-urgent' : 'r-routine';
+    gpEl.innerHTML = `
+      <div class="sp-head" style="margin-bottom:.6rem">
+        <span class="badge ${urgClass}">${urg}</span>
+        <div class="conf-bar" style="max-width:220px">
+          <label>Confidence: ${conf}%</label>
+          <div class="bar-bg"><div class="bar-fill" style="width:${conf}%"></div></div>
+        </div>
+      </div>
+      <div class="summary-box">${gp.gp_summary || ''}</div>
+      ${gp.resolved
+        ? `<p style="font-size:.85rem;color:var(--green)">✅ <strong>Resolved by GP</strong> — ${gp.treatment || 'See summary above.'}</p>`
+        : `<p style="font-size:.85rem;color:var(--orange)">➡️ <strong>Referred to:</strong> ${(gp.referral||'specialist').replace(/_/g,' ')} — ${gp.referral_reason || ''}</p>`
+      }`;
+  } else {
+    gpEl.innerHTML = `<p style="color:var(--muted);font-size:.875rem">GP assessment not available.</p>`;
+  }
+
+  // Hide specialist/NVIDIA cards if GP resolved with no referral
+  document.getElementById('routing-card').style.display   = isCrewAIOnly ? 'none' : '';
+  document.getElementById('sp-card-wrap').style.display   = isCrewAIOnly ? 'none' : '';
+  document.getElementById('nvidia-card').style.display    = isCrewAIOnly ? 'none' : '';
+
   // Routing
   document.getElementById('routing-tags').innerHTML =
-    d.routing.specialists.map(s =>
+    (d.routing.specialists || []).map(s =>
       `<span class="tag tag-spec">${s.replace(/_/g,' ')}</span>`
     ).join('');
   document.getElementById('routing-reason').textContent = d.routing.reasoning;

@@ -31,6 +31,14 @@ Rules:
 
 
 def router_node(state: MedicalReportState) -> dict:
+    # If GP already referred to a specific specialist, skip LLM routing
+    gp_referral = state.get("gp_referral", "")
+    if gp_referral and gp_referral in SPECIALISTS:
+        return {
+            "specialists_needed": [gp_referral],
+            "routing_reasoning": f"GP referral → {gp_referral}. {state.get('gp_notes', '')}",
+        }
+
     specialists_str = "\n".join(f"  {k}: {v}" for k, v in SPECIALISTS.items())
     prompt = _ROUTER_PROMPT.format(
         specialists=specialists_str,

@@ -77,20 +77,24 @@ async def analyze_report(
 
     loop = asyncio.get_event_loop()
     try:
+        from healthcare_agents import run_hybrid_pipeline
         final_state = await asyncio.wait_for(
             loop.run_in_executor(
                 _executor,
-                lambda: healthcare_graph.invoke(initial, {"recursion_limit": 30}),
+                lambda: run_hybrid_pipeline(initial),
             ),
-            timeout=180.0,
+            timeout=240.0,
         )
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Analysis timed out after 3 minutes. The AI APIs may be overloaded — please try again.")
+        raise HTTPException(status_code=504, detail="Analysis timed out after 4 minutes. The AI APIs may be overloaded — please try again.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline error: {e}")
 
     return JSONResponse({
         "success": True,
+        "pipeline_used": final_state.get("pipeline_used", "langgraph"),
+        "gp_assessment": final_state.get("gp_assessment"),
+        "gp_resolved": final_state.get("gp_resolved", False),
         "routing": {
             "specialists": final_state.get("specialists_needed", []),
             "reasoning": final_state.get("routing_reasoning", ""),
