@@ -6,3 +6,8 @@ data.csv
 data.db
 SQLServerExpress.exe
 .claude/
+
+# swing_screener: local price/bhavcopy cache and daily generated reports
+swing_screener/cache/
+swing_screener/reports/*.md
+swing_screener/reports/signals_20*.csv

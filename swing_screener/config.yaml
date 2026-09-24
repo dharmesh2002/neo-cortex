@@ -1,0 +1,80 @@
+# NSE daily swing-trading screener — all tunable parameters live here.
+# Run after 4 PM IST once the day's candle is final.
+
+# ── Capital / risk ──
+capital: 1000000          # ₹10,00,000 default
+risk_per_trade_pct: 0.005 # 0.5% of capital risked per trade (lower to 0.0025 in choppy markets)
+
+# ── Trade plan (fixed by spec — do not change without re-validating the strategy) ──
+atr_stop_multiple: 0.75   # Stop = Entry - 0.75 * ATR(14)
+target_gain_pct: 0.03     # Target = Entry * 1.03
+atr_period: 14
+
+# ── Core signal parameters (fixed by spec — do not change these rules) ──
+bb_window: 20
+bb_std: 2.0
+rsi_period: 14
+rsi_oversold: 35
+rsi_lookback_days: 5
+volume_avg_window: 20
+
+# ── Liquidity filter ──
+liquidity_min_value_cr: 20   # 20-day avg traded value (Close x Volume) >= 20 crore
+
+# ── Universe exclusions ──
+excluded_sector_keywords: ["information technology", "technology", "energy"]
+excluded_industry_keywords: ["airlin", "oil", "gas", "petroleum", "chemical", "paint"]
+
+# ── Extra (non-filtering) checks ──
+rs_lookback_days: 63
+sector_sma_window: 50
+stock_adx_threshold: 25
+nifty_range_window: 60
+
+# ── Market context ──
+nifty_symbol: "^NSEI"
+vix_symbol: "^INDIAVIX"
+nifty_ema_period: 200
+nifty_adx_period: 14
+adx_range_bound_threshold: 20
+
+# ── Data ──
+history_period: "2y"     # initial download window (>= 1yr needed for indicator warmup incl. 200 EMA)
+cache_dir: "swing_screener/cache"
+bhavcopy_cache_dir: "swing_screener/cache/bhavcopy"
+request_timeout_seconds: 45
+request_retries: 3
+request_backoff_seconds: 5
+max_download_workers: 8
+
+# ── Universe sources (fetched fresh every run — never cached/reused) ──
+niftyindices_urls:
+  NIFTY50: "https://niftyindices.com/IndexConstituent/ind_nifty50list.csv"
+  NIFTYNEXT50: "https://niftyindices.com/IndexConstituent/ind_niftynext50list.csv"
+  NIFTYMIDCAP50: "https://niftyindices.com/IndexConstituent/ind_niftymidcap50list.csv"
+
+# ── Sector -> NSE sector-index (yfinance ticker) map ──
+# Matched by keyword against the constituent CSV's Industry column (case-insensitive
+# substring match, first match wins). Anything unmatched reports "n/a" rather than guessing.
+sector_index_map:
+  bank: "^NSEBANK"
+  financial: "^CNXFIN"
+  auto: "^CNXAUTO"
+  pharma: "^CNXPHARMA"
+  healthcare: "^CNXPHARMA"
+  fmcg: "^CNXFMCG"
+  consumer goods: "^CNXFMCG"
+  metal: "^CNXMETAL"
+  realty: "^CNXREALTY"
+  media: "^CNXMEDIA"
+  infra: "^CNXINFRA"
+  psu: "^CNXPSUBANK"
+  private bank: "^NIFTYPVTBANK"
+  consumer durable: "^CNXCONSUM"
+  cement: "^CNXINFRA"
+  construction: "^CNXINFRA"
+  capital goods: "^CNXINFRA"
+
+# ── Output ──
+reports_dir: "swing_screener/reports"
+signals_log_file: "swing_screener/reports/signals_log.csv"
