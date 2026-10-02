@@ -2,8 +2,29 @@
 import os
 
 
+class ClaudeCodeLLM:
+    """Uses the logged-in Claude Code CLI (works with a Claude Pro/Max login, no API key)."""
+
+    def invoke(self, prompt: str):
+        import shutil
+        import subprocess
+        exe = shutil.which("claude")
+        if not exe:
+            raise RuntimeError("claude CLI not found on PATH")
+        r = subprocess.run([exe, "-p", prompt], capture_output=True, text=True, timeout=180, encoding="utf-8")
+        if r.returncode != 0:
+            raise RuntimeError(r.stderr.strip() or "claude CLI failed")
+
+        class _R:
+            content = r.stdout.strip()
+        return _R()
+
+
 def get_llm():
-    """First available provider wins: Gemini (free tier), Groq (free tier), then Anthropic."""
+    """SALES_USE_CLAUDE_CLI=1 uses Claude Code (Pro login). Otherwise the first key found:
+    Gemini (free tier), Groq (free tier), then Anthropic."""
+    if os.getenv("SALES_USE_CLAUDE_CLI") == "1":
+        return ClaudeCodeLLM()
     try:
         if os.getenv("GOOGLE_API_KEY"):
             from langchain_google_genai import ChatGoogleGenerativeAI
