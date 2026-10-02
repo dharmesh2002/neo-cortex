@@ -80,10 +80,7 @@ def website_contact_agent(s: ProspectState) -> dict:
     from concurrent.futures import ThreadPoolExecutor
 
     def work(c):
-        url = sites.get(c["name"])
-        if not url:
-            for r in web_search(f'{c["name"]} official website', 1):
-                url = "/".join(r["url"].split("/")[:3])
+        url = sites.get(c["name"])  # only known/verified sites; no guessing from search results
         if not url:
             return c, None, None
         print(f"  scanning {url}")

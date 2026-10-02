@@ -30,8 +30,8 @@ CATALOG = [
     ("Kotak Mahindra Bank", "Banking", "Ahmedabad"), ("IDFC First Bank", "Banking", "Ahmedabad"),
     ("AU Small Finance Bank", "Banking", "Ahmedabad"), ("Bandhan Bank", "Banking", "Ahmedabad"),
     ("Tata Motors (Sanand)", "Automotive", "Sanand"), ("Maruti Suzuki (Hansalpur)", "Automotive", "Ahmedabad"),
-    ("MG Motor India (Halol)", "Automotive", "Halol"), ("Honda Cars / Honda Motorcycle dealers", "Automotive", "Ahmedabad"),
-    ("Hyundai dealer network", "Automotive", "Ahmedabad"),
+    ("MG Motor India (Halol)", "Automotive", "Halol"),
+    # Add specific dealerships here (e.g. Hyundai / Honda dealers) together with their website in websites.json.
 ]
 
 # Official websites (verify - set your own in websites.json {"Company Name": "https://..."} to override).
