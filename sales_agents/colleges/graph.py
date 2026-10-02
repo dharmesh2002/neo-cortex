@@ -22,9 +22,9 @@ PROFILES = {
     "colleges": dict(input="colleges.csv", contacts="college_contacts.csv", targets="college_targets.csv",
                      cfg=_c_cfg, role_of=_c_role),
     "ushealth": dict(input="institutions_us.csv", contacts="us_contacts.csv", targets="us_targets.csv",
-                     cfg=_u_cfg, role_of=_u_role),
+                     cfg=_u_cfg, role_of=_u_role, same_domain=True),
     "ushospitals": dict(input="hospitals_us.csv", contacts="hospital_contacts.csv", targets="hospital_targets.csv",
-                        cfg=_h_cfg, role_of=_h_role),
+                        cfg=_h_cfg, role_of=_h_role, same_domain=True),
 }
 PROF = PROFILES["colleges"]
 
@@ -68,7 +68,8 @@ def scan_node(s: CollegeState) -> dict:
         if not c["website"]:
             return c, None
         print(f"  scanning {c['website']}")
-        return c, scan_site(c["website"], delay=0.3, paths=PROF["cfg"].PATHS, generic=PROF["cfg"].KEYWORDS)
+        return c, scan_site(c["website"], delay=0.3, paths=PROF["cfg"].PATHS, generic=PROF["cfg"].KEYWORDS,
+                         same_domain_only=PROF.get("same_domain", False))
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(work, s["colleges"]))
     out = []

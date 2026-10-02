@@ -2,7 +2,7 @@
 import re
 import time
 import urllib.request
-from urllib.parse import urljoin, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 PATHS = ["", "/contact", "/contact-us", "/contactus", "/careers", "/vendor", "/vendor-registration", "/procurement"]
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -20,9 +20,19 @@ def _fetch(url: str) -> str:
         return r.read(1_500_000).decode("utf-8", errors="ignore")
 
 
-def scan_site(base_url: str, delay: float = 1.0, paths=None, generic=None) -> dict:
-    """Return {emails: [(email, page)], phones: [(phone, page)], pages: [urls that loaded]}."""
+def _site_key(host: str) -> str:
+    """'healthy.kaiserpermanente.org' -> 'kaiserpermanente'; 'abc.ac.in' -> 'abc'."""
+    parts = host.split(":")[0].split(".")
+    if len(parts) >= 3 and parts[-2] in ("co", "ac", "org", "gov", "edu", "com", "net", "nic"):
+        return parts[-3]
+    return parts[-2] if len(parts) >= 2 else parts[0]
+
+
+def scan_site(base_url: str, delay: float = 1.0, paths=None, generic=None, same_domain_only: bool = False) -> dict:
+    """Return {emails: [(email, page)], phones: [(phone, page)], pages: [urls that loaded]}.
+    same_domain_only=True keeps only addresses on the organisation's own domain (drops other orgs, .gov, gmail)."""
     host = urlparse(base_url).netloc.replace("www.", "")
+    key = _site_key(host)
     paths, generic = paths or PATHS, generic or GENERIC
     emails, phones, pages = {}, {}, []
     for path in paths:
@@ -35,15 +45,19 @@ def scan_site(base_url: str, delay: float = 1.0, paths=None, generic=None) -> di
         text = re.sub(r"<(script|style).*?</\1>", " ", html, flags=re.S | re.I)
         text = text.replace("[at]", "@").replace("(at)", "@").replace("&#64;", "@")
         for e in EMAIL_RE.findall(text):
-            e = e.lower().rstrip(".")
-            if e.endswith(BAD_EXT):
+            e = re.sub(r"^[^a-z0-9]+", "", unquote(e).lower().rstrip("."))   # "%20name@x" -> "name@x"
+            if not e or e.endswith(BAD_EXT):
                 continue
             local, _, dom = e.partition("@")
-            # keep company-domain addresses, or role-style addresses
-            if host.split(".")[0] in dom or any(g in local for g in generic):
+            on_own_domain = key in dom
+            if same_domain_only:
+                if on_own_domain:
+                    emails.setdefault(e, url)
+            elif on_own_domain or any(g in local for g in generic):   # own domain, or role-style address
                 emails.setdefault(e, url)
         for tel in re.findall(r"tel:([+\d\s()-]{8,20})", html):
-            phones.setdefault(tel.strip(), url)
+            if sum(c.isdigit() for c in tel) >= 10:                  # drop cut-off numbers like "866-707-"
+                phones.setdefault(tel.strip(), url)
         time.sleep(delay)
     return {"emails": list(emails.items()), "phones": list(phones.items()), "pages": pages}
 
