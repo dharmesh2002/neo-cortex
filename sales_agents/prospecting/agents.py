@@ -4,6 +4,7 @@ import re
 from ..llm import ask, get_llm
 from . import config
 from .search import linkedin_lookup_url, web_search
+from .webscan import role_of, scan_site
 from .state import ProspectState
 
 
@@ -69,6 +70,31 @@ def decision_maker_agent(s: ProspectState) -> dict:
     return {"contacts": contacts, "log": _log(s, f"DecisionMakerAgent: {len(contacts)} contact targets")}
 
 
+# ── Agent C2: Public contact sheet from company websites ──
+def website_contact_agent(s: ProspectState) -> dict:
+    import json
+    import os
+    sites = dict(config.WEBSITES)
+    if os.path.exists("websites.json"):  # user overrides / additions
+        sites.update(json.load(open("websites.json", encoding="utf-8")))
+    sheet = []
+    for c in s["companies"]:
+        url = sites.get(c["name"])
+        if not url:
+            for r in web_search(f'{c["name"]} official website', 1):
+                url = "/".join(r["url"].split("/")[:3])
+        if not url:
+            continue
+        res = scan_site(url)
+        for email, page in res["emails"]:
+            sheet.append({"company": c["name"], "type": "email", "value": email, "role": role_of(email), "source_url": page})
+        for tel, page in res["phones"]:
+            sheet.append({"company": c["name"], "type": "phone", "value": tel, "role": "General", "source_url": page})
+        if not res["emails"]:
+            sheet.append({"company": c["name"], "type": "website", "value": url, "role": "no public email found", "source_url": url})
+    return {"company_contacts": sheet, "log": _log(s, f"WebsiteContactAgent: {len(sheet)} public contact entries")}
+
+
 # ── Agent D: Score and rank companies ──
 def rank_agent(s: ProspectState) -> dict:
     named = {}
@@ -95,6 +121,7 @@ def export_node(s: ProspectState) -> dict:
         c = rank[ct["company"]]
         rows.append([c["score"], c["name"], c["sector"], c["city"], ct["role"], ct["name"],
                      ct["source_url"], ct["confidence"]])
+    _write_contacts(s)
     path = "prospects.csv"
     try:
         f = open(path, "w", newline="", encoding="utf-8-sig")
@@ -105,3 +132,15 @@ def export_node(s: ProspectState) -> dict:
     with f:
         csv.writer(f).writerows(rows)
     return {"report_path": path, "log": _log(s, f"Export: wrote {path}")}
+
+
+def _write_contacts(s: ProspectState) -> None:
+    import csv
+    try:
+        with open("company_contacts.csv", "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f)
+            w.writerow(["company", "type", "value", "role", "source_url"])
+            for r in s.get("company_contacts", []):
+                w.writerow([r["company"], r["type"], r["value"], r["role"], r["source_url"]])
+    except PermissionError:
+        print("company_contacts.csv is open in another program - close it and run again.")

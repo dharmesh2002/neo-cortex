@@ -33,3 +33,18 @@ CATALOG = [
     ("MG Motor India (Halol)", "Automotive", "Halol"), ("Honda Cars / Honda Motorcycle dealers", "Automotive", "Ahmedabad"),
     ("Hyundai dealer network", "Automotive", "Ahmedabad"),
 ]
+
+# Official websites (verify - set your own in websites.json {"Company Name": "https://..."} to override).
+WEBSITES = {
+    "Zydus Lifesciences": "https://www.zyduslife.com", "Torrent Pharmaceuticals": "https://www.torrentpharma.com",
+    "Intas Pharmaceuticals": "https://www.intaspharma.com", "Alembic Pharmaceuticals": "https://www.alembicpharmaceuticals.com",
+    "Cadila Pharmaceuticals": "https://www.cadilapharma.com", "Sun Pharmaceutical Industries": "https://sunpharma.com",
+    "Troikaa Pharmaceuticals": "https://www.troikaa.com", "Lincoln Pharmaceuticals": "https://www.lincolnpharma.com",
+    "Unichem Laboratories": "https://www.unichemlabs.com", "Sanofi India": "https://www.sanofi.in",
+    "Bank of Baroda": "https://www.bankofbaroda.in", "HDFC Bank": "https://www.hdfcbank.com",
+    "ICICI Bank": "https://www.icicibank.com", "Axis Bank": "https://www.axisbank.com",
+    "Kotak Mahindra Bank": "https://www.kotak.com", "IDFC First Bank": "https://www.idfcfirstbank.com",
+    "AU Small Finance Bank": "https://www.aubank.in", "Bandhan Bank": "https://bandhanbank.com",
+    "Tata Motors (Sanand)": "https://www.tatamotors.com", "Maruti Suzuki (Hansalpur)": "https://www.marutisuzuki.com",
+    "MG Motor India (Halol)": "https://www.mgmotor.co.in",
+}

@@ -23,5 +23,6 @@ class ProspectState(TypedDict, total=False):
     profile: str                 # ideal-customer description
     companies: list[Company]
     contacts: list[Contact]
+    company_contacts: list[dict]  # public emails/phones from company websites
     report_path: str
     log: list[str]
