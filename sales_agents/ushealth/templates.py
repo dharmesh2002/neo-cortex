@@ -15,25 +15,25 @@ FOOTER = (f"\n\n--\n{BUSINESS} | {ADDRESS}\n"
 WHAT = ("an applied AI program for students and early-career professionals in healthcare data roles "
         "(such as healthcare EDI business analysts: claims and X12 transactions) that teaches them to work efficiently with AI tools")
 
+REMOTE = ("{business} is based in India and delivers everything online, so we can host a free webinar for your students "
+          "or hold a 20-minute video call (Zoom or Teams) at a time that suits your time zone.")
+
 PITCH = {
-    "career": ("AI upskilling for {company} students heading into healthcare data roles",
-               "{business} runs {what}.\n\nWe'd like to offer {company}'s students a free intro session or webinar, "
-               "and discuss a partnership. Who is the best person on your team to speak with?"),
-    "program": ("AI skills for your health informatics / HIM students",
-                "{business} runs {what}.\n\nWe'd welcome the chance to share the curriculum outline with you, and to host a guest session "
-                "for {company} students if it's a fit. Could you point us to the right contact, or let us know if you'd like the outline?"),
-    "workforce": ("Healthcare AI training - partnership with {company}",
-                  "{business} runs {what}.\n\nWe are looking for training partners such as {company}'s continuing education team. "
-                  "May we send a short program outline?"),
-    "association": ("Guest webinar proposal on AI for healthcare data roles",
-                    "{business} runs {what}.\n\nWe'd like to offer your members and student chapters a free educational webinar. "
-                    "Who handles education or events for {company}?"),
-    "general": ("Healthcare AI training partnership - {company}",
-                "{business} runs {what}.\n\nCould you please forward this to your career services or health informatics program team? "
-                "We'd like to offer students a free intro session."),
+    "career": ("Free online AI session for {company} students in healthcare data roles",
+               "{business} runs {what}.\n\n" + REMOTE + "\n\nWho on your team would be the right person to schedule this with?"),
+    "program": ("Free online guest session on AI for your health informatics / HIM students",
+                "{business} runs {what}.\n\n" + REMOTE + "\n\nCould you point us to the right contact, or would you like our one-page "
+                "curriculum outline first?"),
+    "workforce": ("Online AI training partnership with {company}",
+                  "{business} runs {what}.\n\n" + REMOTE + "\n\nMay we send a short program outline to your continuing education team?"),
+    "association": ("Free webinar proposal for your members and student chapters",
+                    "{business} runs {what}.\n\n" + REMOTE + "\n\nWho handles education or events for {company}?"),
+    "general": ("Free online AI webinar for {company} students",
+                "{business} runs {what}.\n\n" + REMOTE + "\n\nCould you please forward this to your career services or health "
+                "informatics program team?"),
 }
-FOLLOWUP = ("Following up: AI training for {company} students",
-            "A quick follow-up on my earlier note. If this isn't a priority, no problem. "
+FOLLOWUP = ("Following up: free online AI session for {company} students",
+            "A quick follow-up on my earlier note. If a webinar or short video call isn't a priority right now, no problem. "
             "Otherwise I'd be glad to send a one-page program outline.")
 
 
