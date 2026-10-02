@@ -63,6 +63,7 @@ def plan(limit: int, roles: set, only: list = None) -> list[dict]:
     for r in _read(P["sent"]):
         sent.setdefault(r["email"].lower(), []).append(r)
     contacted = {r["company"] for r in _read(P["sent"])}
+    replied_orgs = {r["company"] for r in _read(P["sent"]) if r["status"] == "replied"}   # anyone there replied -> no follow-ups
     if only:                                   # --only "WEDI,HFMA": restrict to organisations whose name matches
         contacts = [c for c in contacts if any(o.lower() in c["company"].lower() for o in only)]
     blocked, meta, out = _unsub(), _meta(), []
@@ -77,6 +78,8 @@ def plan(limit: int, roles: set, only: list = None) -> list[dict]:
             if c["company"] in contacted:       # already wrote to another inbox of this company
                 continue
             stage = kind
+        elif c["company"] in replied_orgs:
+            continue
         elif len(history) == 1 and datetime.fromisoformat(history[0]["date"]).date() <= date.today() - timedelta(days=FOLLOWUP_AFTER_DAYS) \
                 and history[0]["status"] != "replied":
             stage = "followup"
