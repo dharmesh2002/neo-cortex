@@ -1,5 +1,6 @@
 """Solitiq outreach copy for college placement / training cells. Honest, no invented results."""
 import os
+import re
 
 BUSINESS = os.getenv("BUSINESS_NAME", "Solitiq")
 SENDER = os.getenv("SENDER_NAME", "Your Name")
@@ -46,6 +47,7 @@ def bucket(role: str) -> str:
 
 def build(kind: str, company: str, city: str):
     subj, body = FOLLOWUP if kind == "followup" else PITCH[kind]
+    company = re.sub(r"\s*\(.*?\)", "", company).strip()
     f = {"company": company, "business": BUSINESS, "programs": PROGRAMS}
     return (subj.format(**f), f"Dear {company} team,\n\n" + body.format(**f) + "\n" + SIGNATURE + OPT_OUT)
 

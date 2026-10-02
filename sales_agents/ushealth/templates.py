@@ -1,5 +1,6 @@
 """US outreach copy. CAN-SPAM: real sender, honest subject, physical postal address, working opt-out."""
 import os
+import re
 
 BUSINESS = os.getenv("BUSINESS_NAME", "Solitiq")
 SENDER = os.getenv("SENDER_NAME", "Your Name")
@@ -9,7 +10,7 @@ ADDRESS = os.getenv("POSTAL_ADDRESS", "[YOUR PHYSICAL POSTAL ADDRESS]")   # requ
 
 SIGNATURE = f"\nBest regards,\n{SENDER}\n{BUSINESS}" + (f"\n{PHONE}" if PHONE else "") + (f"\n{WEBSITE}" if WEBSITE else "")
 FOOTER = (f"\n\n--\n{BUSINESS} | {ADDRESS}\n"
-          "This is a business email. If you'd prefer not to hear from us, reply STOP and we will not contact you again.")
+          f"This is a commercial email from {BUSINESS}. If you'd prefer not to hear from us, reply STOP and we will not contact you again.")
 
 WHAT = ("an applied AI program for students and early-career professionals in healthcare data roles "
         "(such as healthcare EDI business analysts: claims and X12 transactions) that teaches them to work efficiently with AI tools")
@@ -51,6 +52,7 @@ def bucket(role: str) -> str:
 
 def build(kind: str, company: str, city: str):
     subj, body = FOLLOWUP if kind == "followup" else PITCH[kind]
+    company = re.sub(r"\s*\(.*?\)", "", company).strip()   # "X University (Health Informatics)" -> "X University"
     f = {"company": company, "business": BUSINESS, "what": WHAT}
     return subj.format(**f), f"Hello {company} team,\n\n" + body.format(**f) + "\n" + SIGNATURE + FOOTER
 

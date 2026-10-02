@@ -1,5 +1,6 @@
 """Plain, honest outreach copy. No named person needed: addressed to the team behind a public inbox."""
 import os
+import re
 
 BUSINESS = os.getenv("BUSINESS_NAME", "Your Company Name")
 SENDER = os.getenv("SENDER_NAME", "Your Name")
@@ -39,6 +40,7 @@ def bucket(role: str) -> str:
 
 def build(kind: str, company: str, city: str):
     subj, body = FOLLOWUP if kind == "followup" else PITCH[kind]
+    company = re.sub(r"\s*\(.*?\)", "", company).strip()
     f = {"company": company, "city": city or CITY}
     return (subj.format(**f),
             f"Dear {company} team,\n\n" + body.format(**f) + "\n" + SIGNATURE + OPT_OUT)
