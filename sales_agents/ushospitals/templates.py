@@ -24,7 +24,7 @@ PITCH = {
                     "I can send a one-page outline right away."),
     "general": ("Free online AI workshop for {company} business analysts",
                 "{business} runs {what}.\n\n" + REMOTE + "\n\nCould you please forward this to your learning and development team "
-                "or the head of business analysis?"),
+                "or the head of business analysis? If someone there would be the right person, I'd be glad to be introduced."),
 }
 FOLLOWUP = ("Following up: free AI workshop for {company} business analysts",
             "A quick follow-up on my earlier note. If this isn't a priority, no problem. "
