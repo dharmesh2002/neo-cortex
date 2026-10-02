@@ -152,18 +152,69 @@ def check_replies():
         print(f"wrote {P['leads']}")
 
 
+def mark_sent(emails: list, company: str):
+    """Record emails you sent by hand, so follow-up timing and de-duplication work."""
+    new = not os.path.exists(P["sent"])
+    with open(P["sent"], "a", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(["email", "company", "stage", "date", "status"])
+        for e in emails:
+            w.writerow([e.strip().lower(), company, "manual", datetime.now().isoformat(timespec="seconds"), "sent"])
+    print(f"recorded {len(emails)} manual email(s) for {company}")
+
+
+def mark_replied(emails: list):
+    rows = _read(P["sent"])
+    hit = {e.strip().lower() for e in emails}
+    for r in rows:
+        if r["email"].lower() in hit:
+            r["status"] = "replied"
+    with open(P["sent"], "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["email", "company", "stage", "date", "status"])
+        w.writeheader(); w.writerows(rows)
+    print(f"marked as replied: {', '.join(sorted(hit))} (no follow-ups will be planned)")
+
+
+def status():
+    rows = _read(P["sent"])
+    if not rows:
+        print("Nothing sent yet.")
+        return
+    print(f"{'EMAIL':38} {'COMPANY':30} {'SENT':10} {'DAYS':>4}  NEXT STEP")
+    for r in rows:
+        d = (date.today() - datetime.fromisoformat(r["date"]).date()).days
+        if r["status"] == "replied":
+            nxt = "Replied - continue the conversation by hand"
+        elif d >= FOLLOWUP_AFTER_DAYS:
+            nxt = "Follow-up due now (run the agent preview)"
+        else:
+            nxt = f"Wait - follow-up in {FOLLOWUP_AFTER_DAYS - d} day(s)"
+        print(f"{r['email'][:37]:38} {r['company'][:29]:30} {r['date'][:10]:10} {d:>4}  {nxt}")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--send", action="store_true")
     ap.add_argument("--check-replies", action="store_true")
     ap.add_argument("--limit", type=int, default=25)
+    ap.add_argument("--mark-sent", default=None, help="comma-separated emails you sent by hand")
+    ap.add_argument("--company", default="", help="organisation name for --mark-sent")
+    ap.add_argument("--mark-replied", default=None, help="comma-separated emails that replied")
+    ap.add_argument("--status", action="store_true", help="show what was sent and what to do next")
     ap.add_argument("--profile", choices=list(PROFILES), default="gifting")
     ap.add_argument("--roles", default=None)
     ap.add_argument("--only", default=None, help='comma-separated organisation names, e.g. "WEDI,HFMA,AAPC"')
     a = ap.parse_args()
     P = PROFILES[a.profile]
     a.roles = a.roles or P["roles"]
-    if a.check_replies:
+    if a.mark_sent:
+        mark_sent(a.mark_sent.split(","), a.company or "(unknown)")
+    elif a.mark_replied:
+        mark_replied(a.mark_replied.split(","))
+    elif a.status:
+        status()
+    elif a.check_replies:
         check_replies()
     else:
         send_all(a.limit, set(a.roles.split(",")), a.send, [x.strip() for x in a.only.split(",")] if a.only else None)
