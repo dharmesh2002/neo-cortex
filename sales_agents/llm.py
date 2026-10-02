@@ -41,19 +41,43 @@ def get_llm():
 
 
 _warned = False
+_last_call = 0.0
+_fail_streak = 0
+MIN_GAP = float(os.getenv("SALES_LLM_DELAY", "5"))  # seconds between calls (free tiers ~10-15/min)
+
+
+def _is_rate_limit(e: Exception) -> bool:
+    t = (type(e).__name__ + str(e)).lower()
+    return "ratelimit" in t or "429" in t or "resource_exhausted" in t or "quota" in t
 
 
 def ask(llm, prompt: str) -> str:
-    """Never raises: on a bad key/network error it warns once and returns ''."""
-    global _warned
-    try:
-        content = llm.invoke(prompt).content
-        if isinstance(content, list):  # Gemini/Claude may return a list of content parts
-            content = "".join(p if isinstance(p, str) else p.get("text", "") for p in content)
-        return str(content)
-    except Exception as e:
-        if not _warned:
-            print(f"WARNING: LLM call failed ({type(e).__name__}) - check your LLM API key (GOOGLE_API_KEY / GROQ_API_KEY / ANTHROPIC_API_KEY). "
-                  "Continuing with rule-based fallbacks.")
-            _warned = True
+    """Throttled, retries on rate limits, never raises. Gives up (returns '') after repeated failures."""
+    import time
+    global _warned, _last_call, _fail_streak
+    if _fail_streak >= 5:  # quota probably exhausted: stop hammering, use fallbacks
         return ""
+    for attempt in range(4):
+        wait = MIN_GAP - (time.time() - _last_call)
+        if wait > 0:
+            time.sleep(wait)
+        _last_call = time.time()
+        try:
+            content = llm.invoke(prompt).content
+            _fail_streak = 0
+            if isinstance(content, list):  # providers may return a list of content parts
+                content = "".join(p if isinstance(p, str) else p.get("text", "") for p in content)
+            return str(content)
+        except Exception as e:
+            if _is_rate_limit(e) and attempt < 3:
+                delay = 20 * (attempt + 1)
+                print(f"Rate limit hit - waiting {delay}s and retrying...")
+                time.sleep(delay)
+                continue
+            _fail_streak += 1
+            if not _warned:
+                kind = "rate limit / free quota used up" if _is_rate_limit(e) else "check your LLM API key"
+                print(f"WARNING: LLM call failed ({type(e).__name__}: {kind}). Using rule-based fallbacks for failed calls.")
+                _warned = True
+            return ""
+    return ""

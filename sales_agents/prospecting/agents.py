@@ -54,9 +54,9 @@ def decision_maker_agent(s: ProspectState) -> dict:
     llm = get_llm()
     contacts = []
     for c in s["companies"]:
-        for role in config.DECISION_ROLES[:5]:
+        for role in config.DECISION_ROLES[:3]:  # HR Head, CHRO, Talent Acquisition
             hit = None
-            for r in web_search(f'"{role}" "{c["name"]}" {c["city"]}', 3):
+            for r in web_search(f'"{role}" "{c["name"]}" {c["city"]}', 2):
                 if llm:
                     out = ask(llm, f'Does this text name the current {role} of {c["name"]}? Reply with only the '
                                    f'person\'s name, or NONE.\n{r["title"]}\n{r["content"][:1200]}').strip()
