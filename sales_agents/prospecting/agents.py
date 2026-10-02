@@ -38,7 +38,11 @@ def discover_agent(s: ProspectState) -> dict:
                                    f"{sector} companies with offices/plants in {city}. Only names explicitly in the text.\n"
                                    f"{r['title']}\n{r['content'][:1500]}")
                     m = re.search(r"\[.*\]", out, re.S)
-                    for nm in (json.loads(m.group()) if m else []):
+                    try:
+                        names = [n for n in json.loads(m.group()) if isinstance(n, str)] if m else []
+                    except ValueError:
+                        names = []
+                    for nm in names:
                         found.setdefault(nm.lower(), {"name": nm, "sector": sector, "city": city, "source": r["url"]})
     companies = list(found.values())
     return {"companies": companies, "log": _log(s, f"DiscoverAgent: {len(companies)} companies")}

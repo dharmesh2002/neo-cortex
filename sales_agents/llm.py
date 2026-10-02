@@ -26,7 +26,10 @@ def ask(llm, prompt: str) -> str:
     """Never raises: on a bad key/network error it warns once and returns ''."""
     global _warned
     try:
-        return llm.invoke(prompt).content
+        content = llm.invoke(prompt).content
+        if isinstance(content, list):  # Gemini/Claude may return a list of content parts
+            content = "".join(p if isinstance(p, str) else p.get("text", "") for p in content)
+        return str(content)
     except Exception as e:
         if not _warned:
             print(f"WARNING: LLM call failed ({type(e).__name__}) - check your LLM API key (GOOGLE_API_KEY / GROQ_API_KEY / ANTHROPIC_API_KEY). "
