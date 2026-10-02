@@ -10,8 +10,19 @@ from langgraph.graph import END, START, StateGraph
 
 from ..prospecting.search import find_website, linkedin_lookup_url
 from ..prospecting.webscan import scan_site
-from . import config
-from .roles import role_of
+from . import config as _c_cfg
+from .roles import role_of as _c_role
+from ..ushealth import config as _u_cfg
+from ..ushealth.roles import role_of as _u_role
+
+# One scanner, several audiences. Pick with: python -m sales_agents.colleges.graph [colleges|ushealth]
+PROFILES = {
+    "colleges": dict(input="colleges.csv", contacts="college_contacts.csv", targets="college_targets.csv",
+                     cfg=_c_cfg, role_of=_c_role),
+    "ushealth": dict(input="institutions_us.csv", contacts="us_contacts.csv", targets="us_targets.csv",
+                     cfg=_u_cfg, role_of=_u_role),
+}
+PROF = PROFILES["colleges"]
 
 
 class CollegeState(TypedDict, total=False):
@@ -25,9 +36,9 @@ def _log(s, m):
 
 
 def load_node(s: CollegeState) -> dict:
-    path = "colleges.csv"
+    path = PROF["input"]
     if not os.path.exists(path):
-        raise SystemExit("colleges.csv not found - run from the neo-cortex folder.")
+        raise SystemExit(f"{path} not found - run from the neo-cortex folder.")
     with open(path, newline="", encoding="utf-8-sig") as f:
         rows = [{k.strip().lower(): (v or "").strip() for k, v in r.items() if k} for r in csv.DictReader(f)]
     if os.path.exists("websites.json"):
@@ -53,17 +64,17 @@ def scan_node(s: CollegeState) -> dict:
         if not c["website"]:
             return c, None
         print(f"  scanning {c['website']}")
-        return c, scan_site(c["website"], delay=0.3, paths=config.PATHS, generic=config.KEYWORDS)
+        return c, scan_site(c["website"], delay=0.3, paths=PROF["cfg"].PATHS, generic=PROF["cfg"].KEYWORDS)
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(work, s["colleges"]))
     out = []
     for c, res in results:
         base = {"company": c["name"], "city": c.get("city", ""), "type": c.get("type", "")}
         if res is None:
-            out.append({**base, "kind": "website", "value": "", "role": "website not found - add it to colleges.csv", "source_url": ""})
+            out.append({**base, "kind": "website", "value": "", "role": "website not found - add it to the input CSV", "source_url": ""})
             continue
         for email, page in res["emails"]:
-            out.append({**base, "kind": "email", "value": email, "role": role_of(email), "source_url": page})
+            out.append({**base, "kind": "email", "value": email, "role": PROF["role_of"](email), "source_url": page})
         for tel, page in res["phones"]:
             out.append({**base, "kind": "phone", "value": tel, "role": "General", "source_url": page})
         if not res["emails"]:
@@ -81,15 +92,15 @@ def export_node(s: CollegeState) -> dict:
         with f:
             w = csv.writer(f); w.writerow(header); w.writerows(rows)
     # `type` column is named like the gifting framework so the same outreach agent can read it
-    save("college_contacts.csv",
+    save(PROF["contacts"],
          [[c["company"], c["kind"], c["value"], c["role"], c["source_url"], c["city"]] for c in s["contacts"]],
          ["company", "type", "value", "role", "source_url", "city"])
     lookups = []
     for c in s["colleges"]:
-        for role in config.TARGET_ROLES:
+        for role in PROF["cfg"].TARGET_ROLES:
             lookups.append([c["name"], c.get("city", ""), role, linkedin_lookup_url(c["name"], role, c.get("city", ""))])
-    save("college_targets.csv", lookups, ["college", "city", "target_role", "linkedin_search"])
-    return {"log": _log(s, "Export: college_contacts.csv, college_targets.csv")}
+    save(PROF["targets"], lookups, ["college", "city", "target_role", "linkedin_search"])
+    return {"log": _log(s, f"Export: {PROF['contacts']}, {PROF['targets']}")}
 
 
 def build_graph():
@@ -106,4 +117,5 @@ def run() -> CollegeState:
 
 
 if __name__ == "__main__":
+    PROF = PROFILES[sys.argv[1] if len(sys.argv) > 1 else "colleges"]
     print("\n".join(run()["log"]))

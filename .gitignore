@@ -18,3 +18,9 @@ sent_log_colleges.csv
 unsubscribe_colleges.txt
 leads_colleges.csv
 outbox_preview_colleges.csv
+us_contacts.csv
+us_targets.csv
+sent_log_us.csv
+unsubscribe_us.txt
+leads_us.csv
+outbox_preview_us.csv

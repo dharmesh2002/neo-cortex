@@ -7,6 +7,8 @@ One shared toolkit, several businesses. Everything runs from the repo root (`neo
 | **Corporate gifting** (Ahmedabad/Vadodara) | `companies.csv` (+ built-in list) | `python -m sales_agents.prospecting.graph [medium\|large]` -> `prospects.csv`, `company_contacts.csv` | `python -m sales_agents.outreach.run` |
 | **Solitiq - AI training tie-ups with colleges** | `colleges.csv` | `python -m sales_agents.colleges.graph` -> `college_contacts.csv`, `college_targets.csv` | `python -m sales_agents.outreach.run --profile colleges` |
 
+| **US healthcare AI program** (EDI business analysts, health informatics / HIM) | `institutions_us.csv` | `python -m sales_agents.colleges.graph ushealth` -> `us_contacts.csv`, `us_targets.csv` | `python -m sales_agents.outreach.run --profile ushealth` (needs `POSTAL_ADDRESS` to send) |
+
 Shared pieces: `prospecting/webscan.py` (public contact scan), `prospecting/search.py` (Tavily + validated website finder),
 `outreach/run.py` (capped, opt-out-aware emailer; preview by default, `--send` to really send), `mailer.py`, `llm.py` (AI is off unless `SALES_USE_LLM=1`).
 

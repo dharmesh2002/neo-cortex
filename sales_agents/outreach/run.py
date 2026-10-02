@@ -14,6 +14,7 @@ from .. import mailer
 from ..agents import NEGATIVE, POSITIVE
 from . import templates as _gifting
 from ..colleges import templates as _colleges
+from ..ushealth import templates as _us
 
 FOLLOWUP_AFTER_DAYS = 5
 
@@ -26,6 +27,11 @@ PROFILES = {
                      unsub="unsubscribe_colleges.txt", leads="leads_colleges.csv", preview="outbox_preview_colleges.csv",
                      bucket=_colleges.bucket, build=_colleges.build, order=_colleges.ORDER,
                      roles="placement,department,principal,general"),
+    "ushealth": dict(contacts="us_contacts.csv", meta="institutions_us.csv", sent="sent_log_us.csv",
+                     unsub="unsubscribe_us.txt", leads="leads_us.csv", preview="outbox_preview_us.csv",
+                     bucket=_us.bucket, build=_us.build, order=_us.ORDER,
+                     roles="career,program,workforce,association,general",
+                     require_env=["POSTAL_ADDRESS"]),   # CAN-SPAM: physical postal address in every email
 }
 P = PROFILES["gifting"]
 
@@ -89,6 +95,9 @@ def send_all(limit: int, roles: set, really_send: bool):
     if not really_send:
         print("Preview only. Review the file, then run with --send to send.")
         return
+    missing = [k for k in P.get("require_env", []) if not os.getenv(k)]
+    if missing and not mailer.DRY_RUN:
+        raise SystemExit(f"Refusing to send: set {', '.join(missing)} first (US law requires a physical address in commercial email).")
     if mailer.DRY_RUN:
         print("SALES_DRY_RUN is on, so NOTHING is really sent and the sent log is not updated.\n"
               "Set SALES_DRY_RUN=0 plus SMTP_HOST, SMTP_USER, SMTP_PASS, MAIL_FROM to send for real.")
