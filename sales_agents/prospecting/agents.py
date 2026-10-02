@@ -1,0 +1,96 @@
+import json
+import re
+
+from ..llm import ask, get_llm
+from . import config
+from .search import linkedin_lookup_url, web_search
+from .state import ProspectState
+
+
+def _log(s: ProspectState, m: str) -> list[str]:
+    return [*s.get("log", []), m]
+
+
+# ── Agent A: Understand the ideal customer from existing good customers ──
+def profile_agent(s: ProspectState) -> dict:
+    sectors = s.get("sectors") or config.SECTORS
+    regions = s.get("regions") or config.REGIONS
+    seeds = ", ".join(f"{c['name']} ({c['sector']})" for c in config.SEED_CUSTOMERS)
+    profile = (f"Mid/large employers in {', '.join(regions)} within {', '.join(sectors)} that hire regularly "
+               f"(joining kits) and buy corporate gifts. Lookalikes of: {seeds}.")
+    return {"sectors": sectors, "regions": regions, "profile": profile,
+            "log": _log(s, "ProfileAgent: ideal customer profile built")}
+
+
+# ── Agent B: Discover target companies ──
+def discover_agent(s: ProspectState) -> dict:
+    found: dict[str, dict] = {}
+    for name, sector, city in config.CATALOG:                      # offline starter list
+        if sector in s["sectors"] and city in s["regions"]:
+            found[name.lower()] = {"name": name, "sector": sector, "city": city, "source": "catalog"}
+
+    llm = get_llm()
+    for sector in s["sectors"]:
+        for city in s["regions"][:2]:
+            for r in web_search(f"top {sector} companies in {city} Gujarat hiring employees", 5):
+                if llm:
+                    out = ask(llm, "From this search result, list company names (JSON array of strings) that are "
+                                   f"{sector} companies with offices/plants in {city}. Only names explicitly in the text.\n"
+                                   f"{r['title']}\n{r['content'][:1500]}")
+                    m = re.search(r"\[.*\]", out, re.S)
+                    for nm in (json.loads(m.group()) if m else []):
+                        found.setdefault(nm.lower(), {"name": nm, "sector": sector, "city": city, "source": r["url"]})
+    companies = list(found.values())
+    return {"companies": companies, "log": _log(s, f"DiscoverAgent: {len(companies)} companies")}
+
+
+# ── Agent C: Find decision makers (public sources only) ──
+def decision_maker_agent(s: ProspectState) -> dict:
+    llm = get_llm()
+    contacts = []
+    for c in s["companies"]:
+        for role in config.DECISION_ROLES[:5]:
+            hit = None
+            for r in web_search(f'"{role}" "{c["name"]}" {c["city"]}', 3):
+                if llm:
+                    out = ask(llm, f'Does this text name the current {role} of {c["name"]}? Reply with only the '
+                                   f'person\'s name, or NONE.\n{r["title"]}\n{r["content"][:1200]}').strip()
+                    if out and out.upper() != "NONE" and len(out) < 60:
+                        hit = {"company": c["name"], "role": role, "name": out,
+                               "source_url": r["url"], "confidence": "medium"}
+                        break
+            contacts.append(hit or {"company": c["name"], "role": role, "name": "",
+                                    "source_url": linkedin_lookup_url(c["name"], role, c["city"]),
+                                    "confidence": "lookup"})
+    return {"contacts": contacts, "log": _log(s, f"DecisionMakerAgent: {len(contacts)} contact targets")}
+
+
+# ── Agent D: Score and rank companies ──
+def rank_agent(s: ProspectState) -> dict:
+    named = {}
+    for ct in s["contacts"]:
+        named[ct["company"]] = named.get(ct["company"], 0) + (1 if ct["name"] else 0)
+    for c in s["companies"]:
+        score = 50 + 10 * named.get(c["name"], 0)
+        if c["city"] in ("Ahmedabad", "Vadodara"):
+            score += 15
+        if c["sector"] in ("Pharma", "Banking"):  # proven sectors
+            score += 10
+        c["score"] = min(score, 100)
+    s["companies"].sort(key=lambda c: -c["score"])
+    return {"companies": s["companies"], "log": _log(s, "RankAgent: companies scored")}
+
+
+# ── Export ──
+def export_node(s: ProspectState) -> dict:
+    import csv
+    path = "prospects.csv"
+    rank = {c["name"]: c for c in s["companies"]}
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["score", "company", "sector", "city", "target_role", "person_name", "verify_at", "confidence"])
+        for ct in sorted(s["contacts"], key=lambda x: -rank[x["company"]]["score"]):
+            c = rank[ct["company"]]
+            w.writerow([c["score"], c["name"], c["sector"], c["city"], ct["role"], ct["name"],
+                        ct["source_url"], ct["confidence"]])
+    return {"report_path": path, "log": _log(s, f"Export: wrote {path}")}
