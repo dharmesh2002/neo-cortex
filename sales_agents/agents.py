@@ -24,7 +24,7 @@ def email_agent(state: SalesState) -> dict:
     body = (f"Hi {c['name'].split()[0]},\n\nI noticed {c['company']} works in {c['industry']}. "
             f"{c.get('notes', '')}. I'd love to show how we can help — do you have 15 minutes this week?\n\nBest regards")
     if llm := get_llm():
-        body = ask(llm, f"Write a short, friendly sales email body (no subject line) to this customer: {c}")
+        body = ask(llm, f"Write a short, friendly sales email body (no subject line) to this customer: {c}") or body
     sent = mailer.send_email(c["email"], subject, body)
     return {"email_subject": subject, "email_body": body, "email_sent": sent,
             "log": _log(state, f"Agent2: email {'sent' if sent else 'FAILED'} to {c['email']}")}
