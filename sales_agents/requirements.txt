@@ -1,2 +1,5 @@
 langgraph>=1.0
-langchain-anthropic>=0.3  # optional: LLM-written emails / lead analysis
+# optional LLM providers - install ONE:
+langchain-google-genai>=2.0   # free tier (GOOGLE_API_KEY)
+# langchain-groq               # free tier (GROQ_API_KEY)
+# langchain-anthropic          # paid (ANTHROPIC_API_KEY)
