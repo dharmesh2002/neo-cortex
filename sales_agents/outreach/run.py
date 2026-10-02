@@ -57,7 +57,7 @@ def _meta() -> dict:
     return {r["name"].lower(): r for r in _read(P["meta"])}
 
 
-def plan(limit: int, roles: set, only: list = None) -> list[dict]:
+def plan(limit: int, roles: set, only: list = None, org_type: str = None) -> list[dict]:
     contacts = [r for r in _read(P["contacts"]) if r["type"] == "email"]
     sent = {}
     for r in _read(P["sent"]):
@@ -66,6 +66,8 @@ def plan(limit: int, roles: set, only: list = None) -> list[dict]:
     replied_orgs = {r["company"] for r in _read(P["sent"]) if r["status"] == "replied"}   # anyone there replied -> no follow-ups
     if only:                                   # --only "WEDI,HFMA": restrict to organisations whose name matches
         contacts = [c for c in contacts if any(o.lower() in c["company"].lower() for o in only)]
+    if org_type:                               # --org-type "Consulting": restrict to one group of organisations
+        contacts = [c for c in contacts if org_type.lower() in (c.get("org_type") or "").lower()]
     blocked, meta, out = _unsub(), _meta(), []
     for c in contacts:
         email = c["value"].lower()
@@ -96,8 +98,8 @@ def plan(limit: int, roles: set, only: list = None) -> list[dict]:
     return uniq[:limit]
 
 
-def send_all(limit: int, roles: set, really_send: bool, only: list = None):
-    batch = plan(limit, roles, only)
+def send_all(limit: int, roles: set, really_send: bool, only: list = None, org_type: str = None):
+    batch = plan(limit, roles, only, org_type)
     preview = P["preview"]
     try:
         f = open(preview, "w", newline="", encoding="utf-8-sig")
@@ -229,6 +231,7 @@ if __name__ == "__main__":
     ap.add_argument("--status", action="store_true", help="show what was sent and what to do next")
     ap.add_argument("--profile", choices=list(PROFILES), default="gifting")
     ap.add_argument("--roles", default=None)
+    ap.add_argument("--org-type", default=None, help='restrict to a group, e.g. "Consulting", "Association", "Payer"')
     ap.add_argument("--only", default=None, help='comma-separated organisation names, e.g. "WEDI,HFMA,AAPC"')
     a = ap.parse_args()
     P = PROFILES[a.profile]
@@ -244,4 +247,4 @@ if __name__ == "__main__":
     elif a.check_replies:
         check_replies()
     else:
-        send_all(a.limit, set(a.roles.split(",")), a.send, [x.strip() for x in a.only.split(",")] if a.only else None)
+        send_all(a.limit, set(a.roles.split(",")), a.send, [x.strip() for x in a.only.split(",")] if a.only else None, a.org_type)

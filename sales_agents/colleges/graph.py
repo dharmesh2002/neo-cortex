@@ -98,8 +98,8 @@ def export_node(s: CollegeState) -> dict:
             w = csv.writer(f); w.writerow(header); w.writerows(rows)
     # `type` column is named like the gifting framework so the same outreach agent can read it
     save(PROF["contacts"],
-         [[c["company"], c["kind"], c["value"], c["role"], c["source_url"], c["city"]] for c in s["contacts"]],
-         ["company", "type", "value", "role", "source_url", "city"])
+         [[c["company"], c["kind"], c["value"], c["role"], c["source_url"], c["city"], c.get("type", "")] for c in s["contacts"]],
+         ["company", "type", "value", "role", "source_url", "city", "org_type"])
     lookups = []
     for c in s["colleges"]:
         for role in PROF["cfg"].TARGET_ROLES:
