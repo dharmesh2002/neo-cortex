@@ -47,6 +47,7 @@ def today(n: int):
     rows = list(csv.DictReader(open(SHEET, encoding="utf-8-sig")))
     now = date.today()
     due, fresh, waiting = [], [], 0
+    started = {r["company"] for r in rows if r.get("person_name", "").strip() or r.get("connect_sent_date", "").strip()}
     for r in rows:
         sent = _date(r.get("connect_sent_date", ""))
         if r.get("replied", "").strip():
@@ -57,8 +58,9 @@ def today(n: int):
                 due.append((days, r))
             else:
                 waiting += 1
-        elif not r.get("person_name", "").strip() and len(fresh) < n:
+        elif not r.get("person_name", "").strip() and len(fresh) < n and r["company"] not in started:
             fresh.append(r)
+            started.add(r["company"])          # one good contact per company is enough
     print(f"=== Today ({now}) ===\n")
     print(f"A) FOLLOW-UPS DUE ({len(due)})")
     for days, r in due:
