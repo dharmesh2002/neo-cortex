@@ -23,6 +23,8 @@ class ClaudeCodeLLM:
 def get_llm():
     """SALES_USE_CLAUDE_CLI=1 uses Claude Code (Pro login). Otherwise the first key found:
     Gemini (free tier), Groq (free tier), then Anthropic."""
+    if os.getenv("SALES_USE_LLM") != "1":  # fast default: no AI calls (set SALES_USE_LLM=1 to enable)
+        return None
     if os.getenv("SALES_USE_CLAUDE_CLI") == "1":
         return ClaudeCodeLLM()
     try:

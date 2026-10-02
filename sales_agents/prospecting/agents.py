@@ -56,7 +56,7 @@ def decision_maker_agent(s: ProspectState) -> dict:
     for c in s["companies"]:
         for role in config.DECISION_ROLES[:3]:  # HR Head, CHRO, Talent Acquisition
             hit = None
-            for r in web_search(f'"{role}" "{c["name"]}" {c["city"]}', 2):
+            for r in (web_search(f'"{role}" "{c["name"]}" {c["city"]}', 2) if llm else []):
                 if llm:
                     out = ask(llm, f'Does this text name the current {role} of {c["name"]}? Reply with only the '
                                    f'person\'s name, or NONE.\n{r["title"]}\n{r["content"][:1200]}').strip()
@@ -77,15 +77,24 @@ def website_contact_agent(s: ProspectState) -> dict:
     sites = dict(config.WEBSITES)
     if os.path.exists("websites.json"):  # user overrides / additions
         sites.update(json.load(open("websites.json", encoding="utf-8")))
-    sheet = []
-    for c in s["companies"]:
+    from concurrent.futures import ThreadPoolExecutor
+
+    def work(c):
         url = sites.get(c["name"])
         if not url:
             for r in web_search(f'{c["name"]} official website', 1):
                 url = "/".join(r["url"].split("/")[:3])
         if not url:
+            return c, None, None
+        print(f"  scanning {url}")
+        return c, url, scan_site(url, delay=0.3)
+
+    sheet = []
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(work, s["companies"]))
+    for c, url, res in results:
+        if not url:
             continue
-        res = scan_site(url)
         for email, page in res["emails"]:
             sheet.append({"company": c["name"], "type": "email", "value": email, "role": role_of(email), "source_url": page})
         for tel, page in res["phones"]:
