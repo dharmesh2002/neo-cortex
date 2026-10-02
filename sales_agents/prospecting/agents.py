@@ -3,7 +3,7 @@ import re
 
 from ..llm import ask, get_llm
 from . import config
-from .search import linkedin_lookup_url, web_search
+from .search import find_website, linkedin_lookup_url, web_search
 from .webscan import role_of, scan_site
 from .state import ProspectState
 
@@ -23,12 +23,34 @@ def profile_agent(s: ProspectState) -> dict:
             "log": _log(s, "ProfileAgent: ideal customer profile built")}
 
 
+def _load_companies_csv() -> dict:
+    """Optional companies.csv in the current folder. Columns: name,sector,city,size,website (only name is required)."""
+    import csv
+    import os
+    out = {}
+    if not os.path.exists("companies.csv"):
+        return out
+    with open("companies.csv", newline="", encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f):
+            row = {k.strip().lower(): (v or "").strip() for k, v in row.items() if k}
+            if not row.get("name"):
+                continue
+            out[row["name"].lower()] = {"name": row["name"], "sector": row.get("sector") or "Other",
+                                        "city": row.get("city") or "Gujarat", "source": "companies.csv",
+                                        "size": row.get("size") or "Unknown", "website": row.get("website", "")}
+    print(f"  loaded {len(out)} companies from companies.csv")
+    return out
+
+
 # ── Agent B: Discover target companies ──
 def discover_agent(s: ProspectState) -> dict:
     found: dict[str, dict] = {}
-    for name, sector, city in config.CATALOG:                      # offline starter list
-        if sector in s["sectors"] and city in s["regions"]:
-            found[name.lower()] = {"name": name, "sector": sector, "city": city, "source": "catalog"}
+    for size, catalog in (("Large", config.CATALOG), ("Medium", config.MID_CATALOG)):   # offline starter lists
+        for name, sector, city in catalog:
+            if sector in s["sectors"] and city in s["regions"]:
+                found[name.lower()] = {"name": name, "sector": sector, "city": city, "source": "catalog",
+                                       "size": size, "website": config.WEBSITES.get(name, "")}
+    found.update(_load_companies_csv())                              # your own list wins
 
     llm = get_llm()
     for sector in s["sectors"]:
@@ -46,6 +68,11 @@ def discover_agent(s: ProspectState) -> dict:
                     for nm in names:
                         found.setdefault(nm.lower(), {"name": nm, "sector": sector, "city": city, "source": r["url"]})
     companies = list(found.values())
+    for c in companies:
+        c.setdefault("size", "Unknown")
+    if s.get("sizes"):
+        want = {x.lower() for x in s["sizes"]}
+        companies = [c for c in companies if c["size"].lower() in want]
     return {"companies": companies, "log": _log(s, f"DiscoverAgent: {len(companies)} companies")}
 
 
@@ -80,7 +107,7 @@ def website_contact_agent(s: ProspectState) -> dict:
     from concurrent.futures import ThreadPoolExecutor
 
     def work(c):
-        url = sites.get(c["name"])  # only known/verified sites; no guessing from search results
+        url = sites.get(c["name"]) or c.get("website") or find_website(c["name"])  # find_website validates the domain
         if not url:
             return c, None, None
         print(f"  scanning {url}")
@@ -91,6 +118,7 @@ def website_contact_agent(s: ProspectState) -> dict:
         results = list(pool.map(work, s["companies"]))
     for c, url, res in results:
         if not url:
+            sheet.append({"company": c["name"], "type": "website", "value": "", "role": "website not found - add it to companies.csv", "source_url": ""})
             continue
         for email, page in res["emails"]:
             sheet.append({"company": c["name"], "type": "email", "value": email, "role": role_of(email), "source_url": page})
@@ -122,10 +150,10 @@ def export_node(s: ProspectState) -> dict:
     import csv
     from datetime import datetime
     rank = {c["name"]: c for c in s["companies"]}
-    rows = [["score", "company", "sector", "city", "target_role", "person_name", "verify_at", "confidence"]]
+    rows = [["score", "company", "size", "sector", "city", "target_role", "person_name", "verify_at", "confidence"]]
     for ct in sorted(s["contacts"], key=lambda x: -rank[x["company"]]["score"]):
         c = rank[ct["company"]]
-        rows.append([c["score"], c["name"], c["sector"], c["city"], ct["role"], ct["name"],
+        rows.append([c["score"], c["name"], c.get("size", ""), c["sector"], c["city"], ct["role"], ct["name"],
                      ct["source_url"], ct["confidence"]])
     _write_contacts(s)
     path = "prospects.csv"

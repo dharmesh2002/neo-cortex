@@ -22,12 +22,14 @@ def build_graph():
     return g.compile()
 
 
-def run(sectors=None, regions=None) -> ProspectState:
-    return build_graph().invoke({"sectors": sectors or [], "regions": regions or [], "log": []})
+def run(sectors=None, regions=None, sizes=None) -> ProspectState:
+    return build_graph().invoke({"sectors": sectors or [], "regions": regions or [], "sizes": sizes or [], "log": []})
 
 
 if __name__ == "__main__":
-    out = run()
+    import sys
+    # usage: python -m sales_agents.prospecting.graph [medium|large]
+    out = run(sizes=[sys.argv[1]] if len(sys.argv) > 1 else None)
     print("\n".join(out["log"]))
     for c in out["companies"][:10]:
         print(c["score"], c["name"], "-", c["sector"], c["city"])

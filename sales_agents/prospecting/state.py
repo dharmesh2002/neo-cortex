@@ -6,6 +6,8 @@ class Company(TypedDict, total=False):
     sector: str
     city: str
     source: str
+    size: str          # Large | Medium | (from your file)
+    website: str
     score: int
 
 
@@ -19,6 +21,7 @@ class Contact(TypedDict, total=False):
 
 class ProspectState(TypedDict, total=False):
     sectors: list[str]
+    sizes: list[str]             # e.g. ['Medium']; empty = all
     regions: list[str]
     profile: str                 # ideal-customer description
     companies: list[Company]

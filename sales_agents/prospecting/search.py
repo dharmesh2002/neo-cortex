@@ -39,3 +39,25 @@ def linkedin_lookup_url(company: str, role: str, city: str) -> str:
     """A manual LinkedIn people-search link the user can open and verify."""
     q = quote_plus(f"{role} {company} {city}")
     return f"https://www.linkedin.com/search/results/people/?keywords={q}"
+
+
+_BAD_DOMAINS = ("linkedin", "facebook", "indiamart", "justdial", "wikipedia", "mapquest", "twitter", "instagram",
+                "youtube", "glassdoor", "naukri", "ambitionbox", "zaubacorp", "tofler", "crunchbase", "google",
+                "bing", "yelp", "tradeindia", "alibaba", "sulekha", "moneycontrol", "economictimes")
+
+
+def find_website(name: str) -> str | None:
+    """Official-site lookup via search. Accepts a result ONLY if the company name's first word is in the domain."""
+    import re
+    from urllib.parse import urlparse
+    words = [w for w in re.findall(r"[a-z0-9]+", name.lower()) if w not in ("the", "of", "and", "india", "ltd", "pvt", "limited")]
+    if not words:
+        return None
+    key = words[0]
+    if len(key) < 4:
+        return None
+    for r in web_search(f"{name} official website", 5):
+        host = urlparse(r["url"]).netloc.lower().replace("www.", "")
+        if key in host and not any(b in host for b in _BAD_DOMAINS):
+            return f"{urlparse(r['url']).scheme}://{urlparse(r['url']).netloc}"
+    return None

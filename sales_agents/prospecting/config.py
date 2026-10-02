@@ -48,3 +48,15 @@ WEBSITES = {
     "Tata Motors (Sanand)": "https://www.tatamotors.com", "Maruti Suzuki (Hansalpur)": "https://www.marutisuzuki.com",
     "MG Motor India (Halol)": "https://www.mgmotor.co.in",
 }
+
+# Medium-scale starter list from general knowledge - NOT verified. Check size/city/status before outreach.
+# Websites are intentionally blank; the agent only accepts a site it can validate, or one you supply.
+MID_CATALOG = [
+    ("Concord Biotech", "Pharma", "Ahmedabad"), ("Dishman Carbogen Amcis", "Pharma", "Ahmedabad"),
+    ("Sotac Pharmaceuticals", "Pharma", "Ahmedabad"), ("Ami Lifesciences", "Pharma", "Vadodara"),
+    ("Sterling Biotech", "Pharma", "Vadodara"), ("Baroda Gujarat Gramin Bank", "Banking", "Vadodara"),
+    ("Ahmedabad Mercantile Co-operative Bank", "Banking", "Ahmedabad"),
+    ("Kalupur Commercial Co-operative Bank", "Banking", "Ahmedabad"),
+    ("Nutan Nagarik Sahakari Bank", "Banking", "Ahmedabad"),
+    ("Gujarat State Co-operative Bank", "Banking", "Ahmedabad"),
+]
