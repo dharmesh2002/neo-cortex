@@ -8,3 +8,7 @@ SQLServerExpress.exe
 .claude/
 prospects.csv
 company_contacts.csv
+sent_log.csv
+unsubscribe.txt
+leads.csv
+outbox_preview.csv
