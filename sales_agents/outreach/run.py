@@ -98,10 +98,17 @@ def plan(limit: int, roles: set, only: list = None) -> list[dict]:
 
 def send_all(limit: int, roles: set, really_send: bool, only: list = None):
     batch = plan(limit, roles, only)
-    with open(P["preview"], "w", newline="", encoding="utf-8-sig") as f:
+    preview = P["preview"]
+    try:
+        f = open(preview, "w", newline="", encoding="utf-8-sig")
+    except PermissionError:      # file is open in Excel - save under a new name instead
+        preview = preview.replace(".csv", f"_{datetime.now():%H%M%S}.csv")
+        print(f"{P['preview']} is open in another program (close it in Excel); saving to {preview} instead.")
+        f = open(preview, "w", newline="", encoding="utf-8-sig")
+    with f:
         w = csv.DictWriter(f, fieldnames=["email", "company", "stage", "subject", "body"])
         w.writeheader(); w.writerows(batch)
-    print(f"{len(batch)} emails planned -> {P['preview']}")
+    print(f"{len(batch)} emails planned -> {preview}")
     if not really_send:
         print("Preview only. Review the file, then run with --send to send.")
         return
