@@ -84,13 +84,20 @@ def rank_agent(s: ProspectState) -> dict:
 # ── Export ──
 def export_node(s: ProspectState) -> dict:
     import csv
-    path = "prospects.csv"
+    from datetime import datetime
     rank = {c["name"]: c for c in s["companies"]}
-    with open(path, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["score", "company", "sector", "city", "target_role", "person_name", "verify_at", "confidence"])
-        for ct in sorted(s["contacts"], key=lambda x: -rank[x["company"]]["score"]):
-            c = rank[ct["company"]]
-            w.writerow([c["score"], c["name"], c["sector"], c["city"], ct["role"], ct["name"],
-                        ct["source_url"], ct["confidence"]])
+    rows = [["score", "company", "sector", "city", "target_role", "person_name", "verify_at", "confidence"]]
+    for ct in sorted(s["contacts"], key=lambda x: -rank[x["company"]]["score"]):
+        c = rank[ct["company"]]
+        rows.append([c["score"], c["name"], c["sector"], c["city"], ct["role"], ct["name"],
+                     ct["source_url"], ct["confidence"]])
+    path = "prospects.csv"
+    try:
+        f = open(path, "w", newline="", encoding="utf-8-sig")
+    except PermissionError:  # file open in Excel - save under a new name instead
+        path = f"prospects_{datetime.now():%Y%m%d_%H%M%S}.csv"
+        print(f"prospects.csv is open in another program; saving to {path} instead.")
+        f = open(path, "w", newline="", encoding="utf-8-sig")
+    with f:
+        csv.writer(f).writerows(rows)
     return {"report_path": path, "log": _log(s, f"Export: wrote {path}")}
