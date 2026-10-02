@@ -162,6 +162,18 @@ def check_replies():
         print(f"wrote {P['leads']}")
 
 
+def add_contact(email: str, company: str, role: str, source: str):
+    """Add an address you found by hand (e.g. on the organisation's own contact page)."""
+    path = P["contacts"]
+    new = not os.path.exists(path)
+    with open(path, "a", newline="", encoding="utf-8-sig" if new else "utf-8") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(["company", "type", "value", "role", "source_url", "city"])
+        w.writerow([company, "email", email.strip().lower(), role, source, ""])
+    print(f"added {email} for {company} ({role}) -> {path}")
+
+
 def mark_sent(emails: list, company: str):
     """Record emails you sent by hand, so follow-up timing and de-duplication work."""
     new = not os.path.exists(P["sent"])
@@ -208,6 +220,9 @@ if __name__ == "__main__":
     ap.add_argument("--send", action="store_true")
     ap.add_argument("--check-replies", action="store_true")
     ap.add_argument("--limit", type=int, default=25)
+    ap.add_argument("--add-contact", default=None, help="an email you found by hand; use with --company, --role, --source")
+    ap.add_argument("--role", default="General", help="role label for --add-contact (e.g. General, Partnerships, Learning & Talent)")
+    ap.add_argument("--source", default="added by hand", help="page where you found the address")
     ap.add_argument("--mark-sent", default=None, help="comma-separated emails you sent by hand")
     ap.add_argument("--company", default="", help="organisation name for --mark-sent")
     ap.add_argument("--mark-replied", default=None, help="comma-separated emails that replied")
@@ -218,7 +233,9 @@ if __name__ == "__main__":
     a = ap.parse_args()
     P = PROFILES[a.profile]
     a.roles = a.roles or P["roles"]
-    if a.mark_sent:
+    if a.add_contact:
+        add_contact(a.add_contact, a.company or "(unknown)", a.role, a.source)
+    elif a.mark_sent:
         mark_sent(a.mark_sent.split(","), a.company or "(unknown)")
     elif a.mark_replied:
         mark_replied(a.mark_replied.split(","))
