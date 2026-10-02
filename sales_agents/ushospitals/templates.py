@@ -16,9 +16,12 @@ PITCH = {
                "\n\nCould you point us to your vendor registration process or the right contact?"),
     "partnerships": ("Partnership idea: AI upskilling for {company} business analysts",
                      "{business} runs {what}.\n\n" + REMOTE + "\n\nWho would be the right person to talk to about partnerships or training programs?"),
-    "association": ("Free webinar proposal on AI for healthcare data and EDI analysts",
-                    "{business} runs {what}.\n\nWe'd like to offer {company}'s members a free educational webinar. " + REMOTE +
-                    "\n\nWho handles education or events for {company}?"),
+    "association": ("Free webinar proposal for {company} members: AI for healthcare EDI and data analysts",
+                    "{business} runs {what}.\n\nWe would like to offer {company}'s members a free 45-minute educational webinar on "
+                    "using AI tools in healthcare EDI and data analysis. {business} is based in India and delivers everything online, "
+                    "so we can present live at a time that suits your members' time zones, or provide a recording.\n\n"
+                    "Could you let us know who handles education or events for {company}, and what a proposal should include? "
+                    "I can send a one-page outline right away."),
     "general": ("Free online AI workshop for {company} business analysts",
                 "{business} runs {what}.\n\n" + REMOTE + "\n\nCould you please forward this to your learning and development team "
                 "or the head of business analysis?"),

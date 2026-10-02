@@ -8,7 +8,15 @@ PHONE = os.getenv("BUSINESS_PHONE", "")
 WEBSITE = os.getenv("BUSINESS_WEBSITE", "")
 ADDRESS = os.getenv("POSTAL_ADDRESS", "[YOUR PHYSICAL POSTAL ADDRESS]")   # required by CAN-SPAM
 
-SIGNATURE = f"\nBest regards,\n{SENDER}\n{BUSINESS}" + (f"\n{PHONE}" if PHONE else "") + (f"\n{WEBSITE}" if WEBSITE else "")
+TITLE = os.getenv("SENDER_TITLE", "")
+EMAIL = os.getenv("BUSINESS_EMAIL", "")
+LINKEDIN = os.getenv("SENDER_LINKEDIN", "")
+
+SIGNATURE = "\n".join(x for x in [
+    "\nBest regards,", SENDER, TITLE, BUSINESS,
+    f"Email: {EMAIL}" if EMAIL else "", f"Phone: {PHONE}" if PHONE else "",
+    f"Web: {WEBSITE}" if WEBSITE else "", f"LinkedIn: {LINKEDIN}" if LINKEDIN else ""] if x != "")
+
 FOOTER = (f"\n\n--\n{BUSINESS} | {ADDRESS}\n"
           f"This is a commercial email from {BUSINESS}. If you'd prefer not to hear from us, reply STOP and we will not contact you again.")
 
