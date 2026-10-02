@@ -15,6 +15,7 @@ from ..agents import NEGATIVE, POSITIVE
 from . import templates as _gifting
 from ..colleges import templates as _colleges
 from ..ushealth import templates as _us
+from ..ushospitals import templates as _hosp
 
 FOLLOWUP_AFTER_DAYS = 5
 
@@ -32,6 +33,10 @@ PROFILES = {
                      bucket=_us.bucket, build=_us.build, order=_us.ORDER,
                      roles="career,program,workforce,association,general",
                      require_env=["POSTAL_ADDRESS"]),   # CAN-SPAM: physical postal address in every email
+    "ushospitals": dict(contacts="hospital_contacts.csv", meta="hospitals_us.csv", sent="sent_log_hospitals.csv",
+                        unsub="unsubscribe_hospitals.txt", leads="leads_hospitals.csv", preview="outbox_preview_hospitals.csv",
+                        bucket=_hosp.bucket, build=_hosp.build, order=_hosp.ORDER,
+                        roles="learning,vendor,partnerships,association,general", require_env=["POSTAL_ADDRESS"]),
 }
 P = PROFILES["gifting"]
 

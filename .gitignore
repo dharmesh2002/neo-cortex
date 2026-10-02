@@ -24,3 +24,9 @@ sent_log_us.csv
 unsubscribe_us.txt
 leads_us.csv
 outbox_preview_us.csv
+hospital_contacts.csv
+hospital_targets.csv
+sent_log_hospitals.csv
+unsubscribe_hospitals.txt
+leads_hospitals.csv
+outbox_preview_hospitals.csv

@@ -13,6 +13,8 @@ from ..prospecting.webscan import scan_site
 from . import config as _c_cfg
 from .roles import role_of as _c_role
 from ..ushealth import config as _u_cfg
+from ..ushospitals import config as _h_cfg
+from ..ushospitals.roles import role_of as _h_role
 from ..ushealth.roles import role_of as _u_role
 
 # One scanner, several audiences. Pick with: python -m sales_agents.colleges.graph [colleges|ushealth]
@@ -21,6 +23,8 @@ PROFILES = {
                      cfg=_c_cfg, role_of=_c_role),
     "ushealth": dict(input="institutions_us.csv", contacts="us_contacts.csv", targets="us_targets.csv",
                      cfg=_u_cfg, role_of=_u_role),
+    "ushospitals": dict(input="hospitals_us.csv", contacts="hospital_contacts.csv", targets="hospital_targets.csv",
+                        cfg=_h_cfg, role_of=_h_role),
 }
 PROF = PROFILES["colleges"]
 
