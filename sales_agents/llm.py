@@ -11,9 +11,9 @@ class ClaudeCodeLLM:
         exe = shutil.which("claude")
         if not exe:
             raise RuntimeError("claude CLI not found on PATH")
-        r = subprocess.run([exe, "-p", prompt], capture_output=True, text=True, timeout=180, encoding="utf-8")
+        r = subprocess.run([exe, "-p"], input=prompt, capture_output=True, text=True, timeout=180, encoding="utf-8")
         if r.returncode != 0:
-            raise RuntimeError(r.stderr.strip() or "claude CLI failed")
+            raise RuntimeError((r.stderr.strip() or r.stdout.strip() or "claude CLI failed")[:300])
 
         class _R:
             content = r.stdout.strip()
@@ -77,7 +77,8 @@ def ask(llm, prompt: str) -> str:
             _fail_streak += 1
             if not _warned:
                 kind = "rate limit / free quota used up" if _is_rate_limit(e) else "check your LLM API key"
-                print(f"WARNING: LLM call failed ({type(e).__name__}: {kind}). Using rule-based fallbacks for failed calls.")
+                print(f"WARNING: LLM call failed ({type(e).__name__}: {kind}). Details: {str(e)[:300]}\n"
+                      "Using rule-based fallbacks for failed calls.")
                 _warned = True
             return ""
     return ""
