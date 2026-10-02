@@ -20,11 +20,12 @@ def _fetch(url: str) -> str:
         return r.read(1_500_000).decode("utf-8", errors="ignore")
 
 
-def scan_site(base_url: str, delay: float = 1.0) -> dict:
+def scan_site(base_url: str, delay: float = 1.0, paths=None, generic=None) -> dict:
     """Return {emails: [(email, page)], phones: [(phone, page)], pages: [urls that loaded]}."""
     host = urlparse(base_url).netloc.replace("www.", "")
+    paths, generic = paths or PATHS, generic or GENERIC
     emails, phones, pages = {}, {}, []
-    for path in PATHS:
+    for path in paths:
         url = urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
         try:
             html = _fetch(url)
@@ -39,7 +40,7 @@ def scan_site(base_url: str, delay: float = 1.0) -> dict:
                 continue
             local, _, dom = e.partition("@")
             # keep company-domain addresses, or role-style addresses
-            if host.split(".")[0] in dom or any(g in local for g in GENERIC):
+            if host.split(".")[0] in dom or any(g in local for g in generic):
                 emails.setdefault(e, url)
         for tel in re.findall(r"tel:([+\d\s()-]{8,20})", html):
             phones.setdefault(tel.strip(), url)
