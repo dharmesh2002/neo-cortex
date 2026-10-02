@@ -57,12 +57,14 @@ def _meta() -> dict:
     return {r["name"].lower(): r for r in _read(P["meta"])}
 
 
-def plan(limit: int, roles: set) -> list[dict]:
+def plan(limit: int, roles: set, only: list = None) -> list[dict]:
     contacts = [r for r in _read(P["contacts"]) if r["type"] == "email"]
     sent = {}
     for r in _read(P["sent"]):
         sent.setdefault(r["email"].lower(), []).append(r)
     contacted = {r["company"] for r in _read(P["sent"])}
+    if only:                                   # --only "WEDI,HFMA": restrict to organisations whose name matches
+        contacts = [c for c in contacts if any(o.lower() in c["company"].lower() for o in only)]
     blocked, meta, out = _unsub(), _meta(), []
     for c in contacts:
         email = c["value"].lower()
@@ -91,8 +93,8 @@ def plan(limit: int, roles: set) -> list[dict]:
     return uniq[:limit]
 
 
-def send_all(limit: int, roles: set, really_send: bool):
-    batch = plan(limit, roles)
+def send_all(limit: int, roles: set, really_send: bool, only: list = None):
+    batch = plan(limit, roles, only)
     with open(P["preview"], "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=["email", "company", "stage", "subject", "body"])
         w.writeheader(); w.writerows(batch)
@@ -157,10 +159,11 @@ if __name__ == "__main__":
     ap.add_argument("--limit", type=int, default=25)
     ap.add_argument("--profile", choices=list(PROFILES), default="gifting")
     ap.add_argument("--roles", default=None)
+    ap.add_argument("--only", default=None, help='comma-separated organisation names, e.g. "WEDI,HFMA,AAPC"')
     a = ap.parse_args()
     P = PROFILES[a.profile]
     a.roles = a.roles or P["roles"]
     if a.check_replies:
         check_replies()
     else:
-        send_all(a.limit, set(a.roles.split(",")), a.send)
+        send_all(a.limit, set(a.roles.split(",")), a.send, [x.strip() for x in a.only.split(",")] if a.only else None)
