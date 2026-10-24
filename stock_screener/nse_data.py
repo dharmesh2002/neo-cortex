@@ -24,6 +24,8 @@ import requests
 logger = logging.getLogger(__name__)
 
 BHAVCOPY_URL = "https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{ddmmyyyy}.csv"
+NIFTY100_URL = "https://niftyindices.com/IndexConstituent/ind_nifty100list.csv"
+NIFTYMIDCAP150_URL = "https://niftyindices.com/IndexConstituent/ind_niftymidcap150list.csv"
 NIFTY500_URL = "https://niftyindices.com/IndexConstituent/ind_nifty500list.csv"
 DEFAULT_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "neo_cortex_nse")
 
@@ -113,17 +115,32 @@ def delivery_series_by_symbol(history: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     return {sym: g.sort_values("Date").set_index("Date") for sym, g in history.groupby("SYMBOL")}
 
 
-def fetch_nifty500(timeout: int = 45) -> pd.DataFrame:
-    """Nifty 500 constituents (Company Name, Industry, Symbol, ...) plus a
-    Ticker column in Yahoo format."""
-    resp = requests.get(NIFTY500_URL, headers={**_HEADERS, "Referer": "https://niftyindices.com/"},
+def _fetch_index_csv(url: str, timeout: int = 45) -> pd.DataFrame:
+    resp = requests.get(url, headers={**_HEADERS, "Referer": "https://niftyindices.com/"},
                         timeout=timeout)
     resp.raise_for_status()
     if resp.text.lstrip().lower().startswith(("<!doctype", "<html")):
-        raise ValueError("niftyindices.com returned an HTML block page instead of the Nifty 500 CSV")
+        raise ValueError(f"niftyindices.com returned an HTML block page instead of a CSV ({url})")
     df = pd.read_csv(io.StringIO(resp.text))
     df.columns = [c.strip() for c in df.columns]
     df = df.dropna(subset=["Symbol"])
     df["Symbol"] = df["Symbol"].str.strip()
+    return df
+
+
+def fetch_cap_tiers(timeout: int = 45) -> Dict[str, str]:
+    """Symbol -> 'Large' (Nifty 100) / 'Mid' (Nifty Midcap 150). Anything not
+    returned is treated as small cap by the caller."""
+    tiers: Dict[str, str] = {}
+    for url, tier in ((NIFTYMIDCAP150_URL, "Mid"), (NIFTY100_URL, "Large")):
+        for sym in _fetch_index_csv(url, timeout)["Symbol"]:
+            tiers[sym] = tier
+    return tiers
+
+
+def fetch_nifty500(timeout: int = 45) -> pd.DataFrame:
+    """Nifty 500 constituents (Company Name, Industry, Symbol, ...) plus a
+    Ticker column in Yahoo format."""
+    df = _fetch_index_csv(NIFTY500_URL, timeout)
     df["Ticker"] = df["Symbol"] + ".NS"
     return df.drop_duplicates(subset=["Symbol"]).reset_index(drop=True)

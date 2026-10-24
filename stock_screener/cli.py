@@ -1025,7 +1025,7 @@ def _build_market_breadth_markdown_report(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 RESILIENCE_COLS = [
-    "ticker", "company", "industry", "verdict", "signals", "score", "trend", "vs_50dma_pct", "vs_200dma_pct",
+    "ticker", "company", "industry", "cap", "verdict", "signals", "score", "trend", "vs_50dma_pct", "vs_200dma_pct",
     "off_high_pct", "range_40d_pct", "excess_20d_pct", "downside_capture", "deliv_ratio",
     "deliv_pct_5d", "deliv_pct_60d", "deliv_pct_chg_pts", "total_vol_ratio", "turnover_driven", "turnover_cr_20d",
     "roe_pct", "debt_to_equity", "pe", "intrinsic_value", "upside_pct", "legacy_pass",
@@ -1046,11 +1046,22 @@ def _format_resilience(rows: list) -> pd.DataFrame:
     return df
 
 
+CAP_PRIORITY = {"Large": 0, "Mid": 1, "Small": 2}
+
+
 def top_per_sector(df: pd.DataFrame, n: int = 20, per_sector: int = 3) -> pd.DataFrame:
-    """Best `n` candidates ranked by signal count then score, at most `per_sector` from any one sector."""
-    cand = df[df["verdict"].fillna("") != ""].sort_values(["signals", "score"], ascending=False)
+    """Each sector keeps at most `per_sector` candidates, filled large caps
+    first, then mid (small caps are excluded; signal count, then score, within a tier).
+    The surviving names are then ranked by signal count and score and the
+    best `n` returned, so mid caps appear only where a sector has too few
+    large-cap candidates to fill its slots."""
+    cand = df[(df["verdict"].fillna("") != "") & df["cap"].isin(["Large", "Mid"])].copy()
+    cand["_cap"] = cand["cap"].map(CAP_PRIORITY)
+    cand = cand.sort_values(["_cap", "signals", "score"], ascending=[True, False, False])
     picked = cand.groupby("industry", sort=False).head(per_sector)
-    return picked.head(n).reset_index(drop=True).rename_axis("rank").reset_index().assign(rank=lambda d: d["rank"] + 1)
+    picked = picked.sort_values(["signals", "score"], ascending=False).head(n)
+    return picked.drop(columns="_cap").reset_index(drop=True).rename_axis("rank").reset_index().assign(
+        rank=lambda d: d["rank"] + 1)
 
 
 def _md_table(df: pd.DataFrame, cols: list) -> str:
@@ -1087,9 +1098,9 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
     lines += [
         f"| **Total** | **{result['evaluated']}** |",
         "",
-        "## Top 20 (max 3 per sector)",
+        "## Top 20 (max 3 per sector; each sector filled large caps first, then mid)",
         "",
-        _md_table(top_per_sector(df), ["rank", "ticker", "industry", "verdict", "signals", "score", "trend",
+        _md_table(top_per_sector(df), ["rank", "ticker", "industry", "cap", "verdict", "signals", "score", "trend",
                                        "vs_50dma_pct", "excess_20d_pct", "deliv_ratio", "deliv_pct_chg_pts",
                                        "upside_pct"]),
         "",
@@ -1232,7 +1243,7 @@ def main():
         picks = df[df["verdict"].fillna("") != ""] if not df.empty else df
         if not df.empty:
             print("\n=== TOP 20 (max 3 per sector) ===")
-            print(top_per_sector(df)[["rank", "ticker", "industry", "verdict", "signals", "score"]].to_string(index=False))
+            print(top_per_sector(df)[["rank", "ticker", "industry", "cap", "verdict", "signals", "score"]].to_string(index=False))
         print(f"\n=== RESILIENCE + ACCUMULATION ({len(picks)}) ===")
         print(picks.to_string(index=False) if not picks.empty else "No candidates.")
 

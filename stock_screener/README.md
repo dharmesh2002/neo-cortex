@@ -88,7 +88,7 @@ positive FCF, earnings or revenue growth, analyst not Sell, and >= 25% upside to
 
 Verdicts: `Potential buy` (candidate + fundamentals + valuation), `Priority watch` (candidate + fundamentals), `Candidate`
 (price signals only). Rows are ranked by signal count, then a price-only 100-point score (resilience 40, base/moving
-averages 35, fundamentals 12, valuation 8, liquidity/risk 5). The report reconciles against the earlier first-pass
+averages 35, fundamentals 12, valuation 8, liquidity/risk 5). The report's Top 20 keeps at most 3 per sector, filling each sector's slots with large caps (Nifty 100) first, then mid caps (Nifty Midcap 150) -- small caps are left out -- and ranks the survivors by signal count and score. The report reconciles against the earlier first-pass
 screen (delivery >= 1.15x, within 3% of 50-day or above, <= 20% off high) and lists the platform-trend counts.
 Graham value is a crude, conservative stand-in for intrinsic value. No backtest exists for this strategy.
 

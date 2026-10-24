@@ -28,7 +28,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from .nse_data import delivery_series_by_symbol, fetch_delivery_history, fetch_nifty500
+from .nse_data import delivery_series_by_symbol, fetch_cap_tiers, fetch_delivery_history, fetch_nifty500
 from .pullback_strategy import fetch_fundamentals
 
 logger = logging.getLogger(__name__)
@@ -323,6 +323,7 @@ def run_resilience_screen(info_sleep_seconds: float = 0.3, universe: Optional[pd
     industry = dict(zip(universe["Symbol"], universe.get("Industry", "")))
     company = dict(zip(universe["Symbol"], universe.get("Company Name", universe["Symbol"])))
 
+    cap_tier = fetch_cap_tiers()  # Nifty 100 = Large, Midcap 150 = Mid, everything else Small
     delivery = delivery_series_by_symbol(fetch_delivery_history(trading_days=66))
     delivery_asof = max(df.index.max() for df in delivery.values()).date().isoformat()
 
@@ -352,6 +353,7 @@ def run_resilience_screen(info_sleep_seconds: float = 0.3, universe: Optional[pd
             skipped["no_delivery"] += 1
             continue
         row = {"ticker": sym, "company": company.get(sym, sym), "industry": industry.get(sym, ""),
+               "cap": cap_tier.get(sym, "Small"),
                **t, **dlv, **legacy_screen(t, dlv), **strict_screen(t, dlv, ctx["weak"])}
         rows.append(row)
 
