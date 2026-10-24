@@ -1025,7 +1025,8 @@ def _build_market_breadth_markdown_report(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 RESILIENCE_COLS = [
-    "ticker", "company", "industry", "cap", "verdict", "signals", "score", "trend",
+    "ticker", "company", "industry", "cap", "verdict", "signals", "score", "s_resilience", "s_base",
+    "s_fundamental", "s_valuation", "s_liquidity", "trend",
     "close", "day_pct", "volume", "vol_chg_pct", "vol_vs_20d_pct", "dma20", "dma50", "dma200",
     "vs_20dma_pct", "vs_50dma_pct", "vs_200dma_pct",
     "off_high_pct", "range_40d_pct", "excess_20d_pct", "downside_capture", "deliv_ratio",
@@ -1048,7 +1049,7 @@ def _format_resilience(rows: list) -> pd.DataFrame:
     return df
 
 
-TOP_COLS = ["rank", "ticker", "cap", "signals", "close", "day_pct", "volume", "vol_chg_pct",
+TOP_COLS = ["rank", "ticker", "cap", "score", "signals", "close", "day_pct", "volume", "vol_chg_pct",
             "vol_vs_20d_pct", "dma20", "dma50", "dma200", "vs_20dma_pct", "vs_50dma_pct", "vs_200dma_pct",
             "deliv_ratio", "deliv_pct_chg_pts"]
 CAP_PRIORITY = {"Large": 0, "Mid": 1, "Small": 2}
@@ -1057,14 +1058,15 @@ CAP_PRIORITY = {"Large": 0, "Mid": 1, "Small": 2}
 def top_per_sector(df: pd.DataFrame, n: int = 20, per_sector: int = 3) -> pd.DataFrame:
     """Each sector keeps at most `per_sector` candidates, filled large caps
     first, then mid (small caps are excluded; signal count, then score, within a tier).
-    The surviving names are then ranked by signal count and score and the
-    best `n` returned, so mid caps appear only where a sector has too few
+    The best `n` survivors (by signal count, then score) are returned ranked by
+    composite score, so mid caps appear only where a sector has too few
     large-cap candidates to fill its slots."""
     cand = df[(df["verdict"].fillna("") != "") & df["cap"].isin(["Large", "Mid"])].copy()
     cand["_cap"] = cand["cap"].map(CAP_PRIORITY)
     cand = cand.sort_values(["_cap", "signals", "score"], ascending=[True, False, False])
     picked = cand.groupby("industry", sort=False).head(per_sector)
     picked = picked.sort_values(["signals", "score"], ascending=False).head(n)
+    picked = picked.sort_values(["score", "signals"], ascending=False)  # final rank: composite score
     return picked.drop(columns="_cap").reset_index(drop=True).rename_axis("rank").reset_index().assign(
         rank=lambda d: d["rank"] + 1)
 
