@@ -24,6 +24,7 @@ from .gap_fill_strategy import run_gap_fill_screen
 from .market_breadth import run_market_breadth
 from .nifty50_scan import run_nifty50_scan
 from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_screen
+from .resilience_strategy import SCREENSHOT_NAMES, run_resilience_screen
 from .screener import run_screen
 from .support_levels import check_support_levels_for_tickers
 from .support_zone_strategy import run_support_zone_screen
@@ -1023,6 +1024,105 @@ def _build_market_breadth_markdown_report(result: dict) -> str:
     ]
     return "\n".join(lines) + "\n"
 
+RESILIENCE_COLS = [
+    "ticker", "company", "verdict", "score", "trend", "vs_50dma_pct", "vs_200dma_pct",
+    "off_high_pct", "range_40d_pct", "excess_20d_pct", "downside_capture", "deliv_ratio",
+    "deliv_pct_5d", "deliv_pct_60d", "total_vol_ratio", "turnover_driven", "turnover_cr_20d",
+    "roe_pct", "debt_to_equity", "pe", "intrinsic_value", "upside_pct", "legacy_pass",
+    "technical_failed",
+]
+
+
+def _format_resilience(rows: list) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    for col in RESILIENCE_COLS:
+        if col not in df.columns:
+            df[col] = None
+    df = df[RESILIENCE_COLS]
+    num = df.select_dtypes("number").columns
+    df[num] = df[num].round(2)
+    return df
+
+
+def _md_table(df: pd.DataFrame, cols: list) -> str:
+    return df[cols].to_markdown(index=False) if not df.empty else "None."
+
+
+def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
+    ctx = result["context"]
+    today = date.today().isoformat()
+    df = df.round(2)
+    legacy = df[df["legacy_pass"]] if not df.empty else df
+    strict = df[df["technical_pass"] == True] if "technical_pass" in df else df  # noqa: E712
+    watch = df[df["verdict"].fillna("") != ""]
+    short = ["ticker", "verdict", "score", "trend", "vs_50dma_pct", "off_high_pct", "range_40d_pct",
+             "excess_20d_pct", "deliv_ratio", "deliv_pct_5d", "deliv_pct_60d", "upside_pct"]
+
+    lines = [
+        f"# Resilience + Accumulation Screener — {today}",
+        "",
+        f"**Market context ({ctx['as_of']}):** Nifty 50 {ctx['close']:.0f}, trend **{ctx['trend']}**, "
+        f"{ctx['ret_20d_pct']:+.1f}% over 20 sessions, {ctx['vs_50dma_pct']:+.1f}% vs its 50-day average. "
+        f"Market weak: **{'yes' if ctx['weak'] else 'no'}**. Delivery data through {result['delivery_asof']} (NSE bhavcopy).",
+        "",
+        f"Universe: Nifty 500 ({result['universe_size']} symbols); {result['evaluated']} evaluated, "
+        f"{result['skipped']['no_prices']} skipped for missing/short price history, "
+        f"{result['skipped']['no_delivery']} for missing delivery data.",
+        "",
+        "## Platform trend",
+        "",
+        "| Platform trend | Names |", "|---|---|",
+    ]
+    for k in ["Uptrend", "Sideways (base)", "No clear trend", "Downtrend", "Can't judge"]:
+        lines.append(f"| {k} | {result['trend_counts'].get(k, 0)} |")
+    lines += [
+        f"| **Total** | **{result['evaluated']}** |",
+        "",
+        "## Candidates (strict rules)",
+        "",
+        f"`Potential buy` = technical entry test + fundamentals gate + >=25% upside to Graham value. "
+        f"`Priority watch` = technical + fundamentals, valuation not met. "
+        f"`Watch` = technical entry or watchlist band passed, fundamentals not met.",
+        "",
+        _md_table(watch, short),
+        "",
+        "## Reconciliation with the first-pass screen",
+        "",
+        f"- First-pass rule (delivery >= 1.15x, within 3% of 50-day or above, <=20% off high, "
+        f"delivery % not falling, >= Rs 5 Cr/day): **{len(legacy)}** names.",
+        f"- Strict entry test: **{int(df['technical_pass'].sum()) if not df.empty else 0}** names; "
+        f"watchlist band: **{int(df['watch_pass'].sum()) if not df.empty else 0}**.",
+        "- The first-pass 'not historically expensive' check needs valuation history that public NSE/Yahoo "
+        "data does not provide, so it is replaced here by the explicit 25%-upside gate; first-pass counts "
+        "are therefore somewhat higher than the screenshot's.",
+        "",
+        "First-pass names:",
+        "",
+        _md_table(legacy, short),
+        "",
+        "### Names from the original screenshots",
+        "",
+        _md_table(df[df["ticker"].isin(SCREENSHOT_NAMES)].assign(
+            ticker=lambda d: pd.Categorical(d["ticker"], SCREENSHOT_NAMES, ordered=True)).sort_values("ticker"),
+            ["ticker", "trend", "vs_50dma_pct", "off_high_pct", "range_40d_pct", "deliv_ratio",
+             "deliv_pct_5d", "deliv_pct_60d", "legacy_pass", "technical_failed", "score"]),
+        "",
+        "`technical_failed` lists the strict checks missed (resilient, delivery_qty, delivery_pct, base_range, near_50dma, "
+        "ma200_flat_up, off_high, not_downtrend, liquid).",
+        "",
+        "---",
+        "Delivery ratio = 5-day average delivery quantity / 60-day average. `turnover_driven` = delivery "
+        "quantity is rising no faster than total traded quantity (surge may be turnover, not holding). "
+        "Intrinsic value is the Graham number sqrt(22.5 x EPS x book value) -- a deliberately crude, "
+        "conservative proxy; replace it with your own estimate before acting. Fundamentals are fetched only "
+        "for names that clear the technical bands. Score (100): resilience 25, delivery 20, base 20, "
+        "fundamentals 15, valuation 10, liquidity/risk 10 (fundamental/valuation points are 0 until fetched). "
+        "No backtest exists for this strategy. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1035,7 +1135,7 @@ def main():
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
                                  "bounce-fundamentals", "decline-reversal",
                                  "backtest-decline-reversal", "buffett", "buffett-relaxed",
-                                 "breadth"],
+                                 "breadth", "resilience"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -1108,6 +1208,27 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "resilience":
+        result = run_resilience_screen(info_sleep_seconds=args.info_sleep)
+        df = _format_resilience(result["rows"])
+        ctx = result["context"]
+        print(f"\nNifty 50 {ctx['close']:.0f} trend={ctx['trend']} 20d={ctx['ret_20d_pct']:+.1f}% "
+              f"weak={ctx['weak']} | delivery data through {result['delivery_asof']}")
+        print(f"Evaluated {result['evaluated']}/{result['universe_size']} | trends: {result['trend_counts']}")
+        picks = df[df["verdict"].fillna("") != ""] if not df.empty else df
+        print(f"\n=== RESILIENCE + ACCUMULATION ({len(picks)}) ===")
+        print(picks.to_string(index=False) if not picks.empty else "No candidates.")
+
+        csv_path = os.path.join(args.output_dir, f"resilience_{today}.csv")
+        report_path = os.path.join(args.output_dir, f"resilience_report_{today}.md")
+        df.to_csv(csv_path, index=False)
+        full = pd.DataFrame(result["rows"])
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(_build_resilience_markdown_report(result, full))
+        print(f"\nSaved: {csv_path}")
+        print(f"Saved: {report_path}")
+        return
 
     if args.strategy == "breadth":
         result = run_market_breadth(csv_dir=args.csv_dir, info_sleep_seconds=args.info_sleep)

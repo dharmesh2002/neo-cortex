@@ -61,6 +61,26 @@ Quick reference:
 | `buffett` | Warren Buffett Quality Screener |
 | `buffett-relaxed` | Warren Buffett Quality Screener (Relaxed) |
 | `breadth` | Market Breadth |
+| `resilience` | Resilience + Accumulation Screener |
+
+## Resilience + Accumulation (`--strategy resilience`)
+
+Finds stocks that hold up while the market is weak *and* show delivery-backed accumulation, over
+the Nifty 500. Delivery quantity / delivery % come straight from NSE's daily bhavcopy archive
+(cached in `~/.cache/neo_cortex_nse`, only missing days are downloaded); prices from Yahoo Finance.
+
+| Filter | Strict rule |
+|---|---|
+| Resilience | Benchmark (Nifty 50) weak over 20 sessions or below its 50-day; stock beats it over 20 sessions, or is down < 2% |
+| Delivery | 5-day avg delivery qty >= 1.25x the 60-day avg (>= 1.5x strong), delivery % not falling > 1pt; `turnover_driven` flags surges that are just higher total volume |
+| Base / trend | 40-day range <= 12%, close within -3%..+5% of 50-day (watchlist -5%..+10%), 200-day flat or rising, <= 20% off 52-week high, not in a downtrend, >= Rs 5 Cr/day turnover |
+| Fundamentals + valuation | ROE > 15%, D/E < 100 (lenders exempt from debt/FCF), positive FCF, earnings or revenue growth, analyst not Sell, and >= 25% upside to the Graham value sqrt(22.5 x EPS x BVPS) |
+
+Verdicts: `Potential buy` (all four), `Priority watch` (technical + fundamentals), `Watch` (technical or
+watchlist band only). Every name also gets a 100-point score (resilience 25, delivery 20, base 20,
+fundamentals 15, valuation 10, liquidity/risk 10). The report reconciles against the earlier first-pass
+screen (delivery >= 1.15x, within 3% of 50-day or above, <= 20% off high) and lists the platform-trend counts.
+Graham value is a crude, conservative stand-in for intrinsic value. No backtest exists for this strategy.
 
 ## Market Breadth (unfiltered baseline)
 
