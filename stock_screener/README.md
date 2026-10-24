@@ -72,13 +72,13 @@ the Nifty 500. Delivery quantity / delivery % come straight from NSE's daily bha
 | Filter | Strict rule |
 |---|---|
 | Resilience | Benchmark (Nifty 50) weak over 20 sessions or below its 50-day; stock beats it over 20 sessions, or is down < 2% |
-| Delivery (supporting only) | Light floor: 5-day avg delivery qty >= 1.0x the 60-day avg and delivery % not down > 3pts. >= 1.25x / 1.5x only adds score and sets `delivery_confirmed` / `delivery_strong`; `turnover_driven` flags surges that are just higher total volume |
+| Delivery (info only) | Not a filter and not scored. Shown as `deliv_ratio` (5-day avg delivery qty / 60-day avg) and `deliv_pct_chg_pts` (5-day minus 60-day avg delivery %, in points); `turnover_driven` flags surges that are just higher total volume |
 | Base / trend | 40-day range <= 12%, close within -3%..+5% of 50-day (watchlist -5%..+10%), 200-day flat or rising, <= 20% off 52-week high, not in a downtrend, >= Rs 5 Cr/day turnover |
 | Fundamentals + valuation | ROE > 15%, D/E < 100 (lenders exempt from debt/FCF), positive FCF, earnings or revenue growth, analyst not Sell, and >= 25% upside to the Graham value sqrt(22.5 x EPS x BVPS) |
 
 Verdicts: `Potential buy` (all four), `Priority watch` (technical + fundamentals), `Watch` (technical or
-watchlist band only). Every name also gets a 100-point score (price-led: resilience 35, base/moving averages 30,
-delivery 10, fundamentals 12, valuation 8, liquidity/risk 5). The report reconciles against the earlier first-pass
+watchlist band only). Every name also gets a 100-point score (price-only technicals: resilience 40, base/moving averages 35,
+fundamentals 12, valuation 8, liquidity/risk 5). The report reconciles against the earlier first-pass
 screen (delivery >= 1.15x, within 3% of 50-day or above, <= 20% off high) and lists the platform-trend counts.
 Graham value is a crude, conservative stand-in for intrinsic value. No backtest exists for this strategy.
 

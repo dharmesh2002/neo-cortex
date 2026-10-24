@@ -38,12 +38,8 @@ MIN_HISTORY_ROWS = 220  # 200-day average plus its 20-day slope lookback
 BENCHMARK = "^NSEI"
 
 # --- Proposed (strict) rules -------------------------------------------------
-# Delivery is supporting evidence, not the driver: a light floor (volume isn't
-# drying up) gates entry; 1.25x / 1.5x only earn score points and a flag.
-DELIVERY_RATIO_MIN = 1.0
-DELIVERY_RATIO_CONFIRM = 1.25
-DELIVERY_RATIO_STRONG = 1.5
-DELIVERY_PCT_MAX_DROP = 3.0
+# Delivery is information only: it is reported (quantity ratio, delivery %
+# change in points) but takes no part in the gate or the score.
 RANGE_40D_MAX_PCT = 12.0
 DMA50_ENTRY_BAND = (-3.0, 5.0)       # % vs 50-day for an entry-test pass
 DMA50_WATCH_BAND = (-5.0, 10.0)      # % vs 50-day for the watchlist
@@ -194,9 +190,6 @@ def strict_screen(t: Dict, dlv: Dict, market_weak: bool) -> Dict:
     lo, hi = DMA50_ENTRY_BAND
     wlo, whi = DMA50_WATCH_BAND
     holds_up = t["excess_20d_pct"] >= 0 or t["ret_20d_pct"] >= -2.0
-    delivery_qty_ok = dlv["deliv_ratio"] >= DELIVERY_RATIO_MIN
-    delivery_pct_ok = dlv["deliv_pct_5d"] >= dlv["deliv_pct_60d"] - DELIVERY_PCT_MAX_DROP
-    delivery_real = delivery_qty_ok and delivery_pct_ok
     # Delivery quantity rising no faster than total volume means the surge may
     # just be more turnover, not more holding -- flagged and scored, not a hard fail.
     turnover_driven = bool(not math.isnan(dlv["total_vol_ratio"]) and dlv["deliv_ratio"] <= dlv["total_vol_ratio"])
@@ -208,8 +201,6 @@ def strict_screen(t: Dict, dlv: Dict, market_weak: bool) -> Dict:
 
     entry_checks = {
         "resilient": holds_up,
-        "delivery_qty": delivery_qty_ok,
-        "delivery_pct": delivery_pct_ok,
         "base_range": base_ok,
         "near_50dma": lo <= t["vs_50dma_pct"] <= hi,
         "ma200_flat_up": ma200_ok,
@@ -227,8 +218,7 @@ def strict_screen(t: Dict, dlv: Dict, market_weak: bool) -> Dict:
         "watch_pass": watch_pass,
         "technical_failed": ", ".join(k for k, v in entry_checks.items() if not v),
         "turnover_driven": turnover_driven,
-        "delivery_confirmed": bool(delivery_real and dlv["deliv_ratio"] >= DELIVERY_RATIO_CONFIRM),
-        "delivery_strong": bool(delivery_real and dlv["deliv_ratio"] >= DELIVERY_RATIO_STRONG),
+        "deliv_pct_chg_pts": dlv["deliv_pct_5d"] - dlv["deliv_pct_60d"],
         "market_weak": market_weak,
     }
 
@@ -282,23 +272,17 @@ def _scale(x: float, lo: float, hi: float, pts: float) -> float:
 
 
 def score_stock(t: Dict, dlv: Dict, f: Optional[Dict]) -> Dict:
-    # Price-led score. Resilience vs the market: 35
-    rs = _scale(t["excess_20d_pct"], -2, 8, 15)
-    rs += _scale(t["excess_10d_pct"], -2, 5, 7)
+    # Price-only technical score. Resilience vs the market: 40
+    rs = _scale(t["excess_20d_pct"], -2, 8, 17)
+    rs += _scale(t["excess_10d_pct"], -2, 5, 8)
     capture = t["downside_capture"]
-    rs += _scale(capture if capture is not None else 0.4, 0.4, 0.8, 13)
+    rs += _scale(capture if capture is not None else 0.4, 0.4, 0.8, 15)
 
-    # Base quality and moving averages: 30
-    base = _scale(RANGE_40D_MAX_PCT * 2 - t["range_40d_pct"], 0, RANGE_40D_MAX_PCT * 2 - 8, 10)
-    base += _scale(6 - abs(t["vs_50dma_pct"] + 0.5), 0, 6, 10)
-    base += _scale(t["dma200_slope_pct"], -2, 1, 6)
+    # Base quality and moving averages: 35
+    base = _scale(RANGE_40D_MAX_PCT * 2 - t["range_40d_pct"], 0, RANGE_40D_MAX_PCT * 2 - 8, 12)
+    base += _scale(6 - abs(t["vs_50dma_pct"] + 0.5), 0, 6, 12)
+    base += _scale(t["dma200_slope_pct"], -2, 1, 7)
     base += _scale(OFF_HIGH_MAX_PCT * 1.5 - t["off_high_pct"], 0, OFF_HIGH_MAX_PCT * 1.5 - 5, 4)
-
-    # Delivery as supporting evidence only: 10
-    dv = _scale(dlv["deliv_ratio"], 1.0, 1.5, 6)
-    dv += _scale(dlv["deliv_pct_5d"] - dlv["deliv_pct_60d"], -3, 4, 2)
-    if not math.isnan(dlv["total_vol_ratio"]):
-        dv += _scale(dlv["deliv_ratio"] - dlv["total_vol_ratio"], 0, 0.3, 2)
 
     # Fundamental quality: 12 / valuation: 8 (only known once fundamentals were fetched)
     fund = val = 0.0
@@ -310,7 +294,7 @@ def score_stock(t: Dict, dlv: Dict, f: Optional[Dict]) -> Dict:
     liq = _scale(dlv["turnover_cr_20d"], MIN_TURNOVER_CR, STRONG_TURNOVER_CR, 2)
     liq += _scale(3.0 - t["daily_vol_pct"], 0, 1.5, 3)
 
-    parts = {"s_resilience": rs, "s_delivery": dv, "s_base": base,
+    parts = {"s_resilience": rs, "s_base": base,
              "s_fundamental": fund, "s_valuation": val, "s_liquidity": liq}
     parts = {k: round(float(v), 1) for k, v in parts.items()}
     parts["score"] = round(sum(parts.values()), 1)

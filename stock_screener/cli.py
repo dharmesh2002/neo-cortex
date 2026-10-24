@@ -1027,7 +1027,7 @@ def _build_market_breadth_markdown_report(result: dict) -> str:
 RESILIENCE_COLS = [
     "ticker", "company", "verdict", "score", "trend", "vs_50dma_pct", "vs_200dma_pct",
     "off_high_pct", "range_40d_pct", "excess_20d_pct", "downside_capture", "deliv_ratio",
-    "deliv_pct_5d", "deliv_pct_60d", "total_vol_ratio", "turnover_driven", "turnover_cr_20d",
+    "deliv_pct_5d", "deliv_pct_60d", "deliv_pct_chg_pts", "total_vol_ratio", "turnover_driven", "turnover_cr_20d",
     "roe_pct", "debt_to_equity", "pe", "intrinsic_value", "upside_pct", "legacy_pass",
     "technical_failed",
 ]
@@ -1058,7 +1058,7 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
     strict = df[df["technical_pass"] == True] if "technical_pass" in df else df  # noqa: E712
     watch = df[df["verdict"].fillna("") != ""]
     short = ["ticker", "verdict", "score", "trend", "vs_50dma_pct", "off_high_pct", "range_40d_pct",
-             "excess_20d_pct", "deliv_ratio", "deliv_pct_5d", "deliv_pct_60d", "upside_pct"]
+             "excess_20d_pct", "deliv_ratio", "deliv_pct_chg_pts", "upside_pct"]
 
     lines = [
         f"# Resilience + Accumulation Screener — {today}",
@@ -1107,18 +1107,18 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
         _md_table(df[df["ticker"].isin(SCREENSHOT_NAMES)].assign(
             ticker=lambda d: pd.Categorical(d["ticker"], SCREENSHOT_NAMES, ordered=True)).sort_values("ticker"),
             ["ticker", "trend", "vs_50dma_pct", "off_high_pct", "range_40d_pct", "deliv_ratio",
-             "deliv_pct_5d", "deliv_pct_60d", "legacy_pass", "technical_failed", "score"]),
+             "deliv_pct_chg_pts", "legacy_pass", "technical_failed", "score"]),
         "",
-        "`technical_failed` lists the strict checks missed (resilient, delivery_qty (floor 1.0x), delivery_pct, base_range, near_50dma, "
+        "`technical_failed` lists the strict checks missed (resilient, base_range, near_50dma, "
         "ma200_flat_up, off_high, not_downtrend, liquid).",
         "",
         "---",
-        "Delivery ratio = 5-day average delivery quantity / 60-day average. `turnover_driven` = delivery "
+        "Delivery is information only (not in the strict gate or score): `deliv_ratio` = 5-day average delivery quantity / 60-day average, `deliv_pct_chg_pts` = 5-day minus 60-day average delivery % in points. `turnover_driven` = delivery "
         "quantity is rising no faster than total traded quantity (surge may be turnover, not holding). "
         "Intrinsic value is the Graham number sqrt(22.5 x EPS x book value) -- a deliberately crude, "
         "conservative proxy; replace it with your own estimate before acting. Fundamentals are fetched only "
-        "for names that clear the technical bands. Score (100, price-led): resilience 35, base/moving averages 30, "
-        "delivery 10, fundamentals 12, valuation 8, liquidity/risk 5 (fundamental/valuation points are 0 until fetched). "
+        "for names that clear the technical bands. Score (100, price-only technicals): resilience 40, base/moving averages 35, "
+        "fundamentals 12, valuation 8, liquidity/risk 5; delivery is info only (fundamental/valuation points are 0 until fetched). "
         "No backtest exists for this strategy. Not investment advice.",
     ]
     return "\n".join(lines) + "\n"
