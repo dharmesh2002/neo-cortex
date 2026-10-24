@@ -24,6 +24,7 @@ from .gap_fill_strategy import run_gap_fill_screen
 from .market_breadth import run_market_breadth
 from .nifty50_scan import run_nifty50_scan
 from .pullback_strategy import check_fundamentals_for_tickers, run_pullback_screen
+from .backtest_resilience import build_report as build_backtest_resilience_report, run_backtest_resilience
 from .resilience_strategy import SCREENSHOT_NAMES, run_resilience_screen
 from .screener import run_screen
 from .support_levels import check_support_levels_for_tickers
@@ -1164,7 +1165,7 @@ def main():
                                  "backtest-support-zone-mtf", "backtest-support-zone-rr",
                                  "bounce-fundamentals", "decline-reversal",
                                  "backtest-decline-reversal", "buffett", "buffett-relaxed",
-                                 "breadth", "resilience"],
+                                 "breadth", "resilience", "backtest-resilience"],
                         default="bounce",
                         help="'bounce' (default): Bollinger/RSI/Volume/RelativeStrength bounce "
                              "signals. 'pullback': quality stocks resting near 50-day support "
@@ -1237,6 +1238,19 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     today = date.today().isoformat()
+
+    if args.strategy == "backtest-resilience":
+        result = run_backtest_resilience()
+        report = build_backtest_resilience_report(result)
+        print(report)
+        report_path = os.path.join(args.output_dir, f"backtest_resilience_report_{today}.md")
+        detail_path = os.path.join(args.output_dir, f"backtest_resilience_detail_{today}.csv")
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(report)
+        result["detail"].to_csv(detail_path, index=False)
+        print(f"Saved: {report_path}")
+        print(f"Saved: {detail_path}")
+        return
 
     if args.strategy == "resilience":
         result = run_resilience_screen(info_sleep_seconds=args.info_sleep)

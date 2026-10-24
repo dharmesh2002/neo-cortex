@@ -37,6 +37,7 @@ on:
           - buffett-relaxed
           - breadth
           - resilience
+          - backtest-resilience
       tickers:
         description: "Comma-separated NSE tickers for strategy=fundamentals/levels, e.g. INFY.NS,TCS.NS"
         required: false
@@ -128,6 +129,9 @@ jobs:
           elif [ "$STRATEGY" = "resilience" ]; then
             BODY_FILE="output/resilience_report_${DATE}.md"
             TITLE="Resilience + Accumulation Screener — ${DATE}"
+          elif [ "$STRATEGY" = "backtest-resilience" ]; then
+            BODY_FILE="output/backtest_resilience_report_${DATE}.md"
+            TITLE="Resilience Screener Backtest — ${DATE}"
           else
             BODY_FILE="output/report_${DATE}.md"
             TITLE="Stock Screener — ${DATE}"

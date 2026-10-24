@@ -62,6 +62,7 @@ Quick reference:
 | `buffett-relaxed` | Warren Buffett Quality Screener (Relaxed) |
 | `breadth` | Market Breadth |
 | `resilience` | Resilience + Accumulation Screener |
+| `backtest-resilience` | Resilience Screener Backtest |
 
 ## Resilience + Accumulation (`--strategy resilience`)
 
@@ -90,7 +91,9 @@ Verdicts: `Potential buy` (candidate + fundamentals + valuation), `Priority watc
 (price signals only). Rows are ranked by signal count, then a price-only 100-point score (resilience 40, base/moving
 averages 35, fundamentals 12, valuation 8, liquidity/risk 5). The report's Top 20 keeps at most 3 per sector, filling each sector's slots with large caps (Nifty 100) first, then mid caps (Nifty Midcap 150) -- small caps are left out -- and picks the best 20 by signal count and score, then ranks them by composite score. The report reconciles against the earlier first-pass
 screen (delivery >= 1.15x, within 3% of 50-day or above, <= 20% off high) and lists the platform-trend counts.
-Graham value is a crude, conservative stand-in for intrinsic value. No backtest exists for this strategy.
+Graham value is a crude, conservative stand-in for intrinsic value.
+
+`--strategy backtest-resilience` backtests the price-signal engine and Top-20 selection over ~5 years of current Nifty 500 history (weekly rebalance, 10/20/40-session holds, vs Nifty 50 and an equal-weight universe). Delivery and fundamentals can't be tested point-in-time, and survivorship bias flatters the results. First run found no edge over the equal-weight universe.
 
 ## Market Breadth (unfiltered baseline)
 
