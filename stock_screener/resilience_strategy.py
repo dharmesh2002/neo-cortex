@@ -42,7 +42,8 @@ BENCHMARK = "^NSEI"
 # change in points) but takes no part in the gate or the score.
 RANGE_40D_MAX_PCT = 12.0
 DMA50_ENTRY_BAND = (-3.0, 5.0)       # % vs 50-day for an entry-test pass
-DMA50_WATCH_BAND = (-5.0, 10.0)      # % vs 50-day for the watchlist
+MIN_SIGNALS = 3                      # of 7 price signals needed to be a candidate
+MAX_SIGNALS = 7
 OFF_HIGH_MAX_PCT = 20.0
 DMA200_SLOPE_MIN_PCT = -1.0          # 200-day today vs 20 sessions ago: "flat or rising"
 MIN_TURNOVER_CR = 5.0
@@ -187,36 +188,31 @@ def legacy_screen(t: Dict, dlv: Dict) -> Dict:
 
 
 def strict_screen(t: Dict, dlv: Dict, market_weak: bool) -> Dict:
+    """Count how many price signals a stock shows. No single signal is
+    mandatory: MIN_SIGNALS of them make it a candidate. Liquidity is the only
+    hard requirement (an untradeable name is no candidate however it looks)."""
     lo, hi = DMA50_ENTRY_BAND
-    wlo, whi = DMA50_WATCH_BAND
-    holds_up = t["excess_20d_pct"] >= 0 or t["ret_20d_pct"] >= -2.0
     # Delivery quantity rising no faster than total volume means the surge may
-    # just be more turnover, not more holding -- flagged and scored, not a hard fail.
+    # just be more turnover, not more holding -- flagged only.
     turnover_driven = bool(not math.isnan(dlv["total_vol_ratio"]) and dlv["deliv_ratio"] <= dlv["total_vol_ratio"])
-    base_ok = t["range_40d_pct"] <= RANGE_40D_MAX_PCT
-    ma200_ok = t["dma200_slope_pct"] >= DMA200_SLOPE_MIN_PCT
-    not_downtrend = t["trend"] != "Downtrend"
-    liquid = dlv["turnover_cr_20d"] >= MIN_TURNOVER_CR
-    near_high = t["off_high_pct"] <= OFF_HIGH_MAX_PCT
+    capture = t["downside_capture"]
 
-    entry_checks = {
-        "resilient": holds_up,
-        "base_range": base_ok,
+    signals = {
+        "beats_nifty": t["excess_20d_pct"] >= 0 or t["ret_20d_pct"] >= -2.0,
+        "cushions_down_days": bool(capture is not None and capture >= 0.5),
+        "tight_base": t["range_40d_pct"] <= RANGE_40D_MAX_PCT,
         "near_50dma": lo <= t["vs_50dma_pct"] <= hi,
-        "ma200_flat_up": ma200_ok,
-        "off_high": near_high,
-        "not_downtrend": not_downtrend,
-        "liquid": liquid,
+        "ma200_flat_up": t["dma200_slope_pct"] >= DMA200_SLOPE_MIN_PCT,
+        "near_high": t["off_high_pct"] <= OFF_HIGH_MAX_PCT,
+        "not_downtrend": t["trend"] != "Downtrend",
     }
-    watch_checks = {**entry_checks, "near_50dma": wlo <= t["vs_50dma_pct"] <= whi,
-                    "base_range": t["range_40d_pct"] <= RANGE_40D_MAX_PCT * 1.5,
-                    "ma200_flat_up": True, "not_downtrend": True}
-    entry_pass = all(entry_checks.values())
-    watch_pass = all(watch_checks.values())
+    n = sum(signals.values())
+    liquid = dlv["turnover_cr_20d"] >= MIN_TURNOVER_CR
     return {
-        "technical_pass": entry_pass,
-        "watch_pass": watch_pass,
-        "technical_failed": ", ".join(k for k, v in entry_checks.items() if not v),
+        "signals": n,
+        "signals_passed": ", ".join(k for k, v in signals.items() if v),
+        "technical_failed": ", ".join(k for k, v in signals.items() if not v),
+        "technical_pass": bool(n >= MIN_SIGNALS and liquid),
         "turnover_driven": turnover_driven,
         "deliv_pct_chg_pts": dlv["deliv_pct_5d"] - dlv["deliv_pct_60d"],
         "market_weak": market_weak,
@@ -309,8 +305,8 @@ def classify(row: Dict) -> str:
         return "Potential buy"
     if row["technical_pass"] and row.get("fundamentals_pass"):
         return "Priority watch"
-    if row["technical_pass"] or row["watch_pass"]:
-        return "Watch"
+    if row["technical_pass"]:
+        return "Candidate"
     return ""
 
 
@@ -361,7 +357,7 @@ def run_resilience_screen(info_sleep_seconds: float = 0.3, universe: Optional[pd
 
     # Fundamentals only for names that clear the technical bar (slow per-ticker call).
     for row in rows:
-        if not (row["technical_pass"] or row["watch_pass"]):
+        if not row["technical_pass"]:
             continue
         info = fetch_fundamentals(row["ticker"] + ".NS", info_sleep_seconds)
         financial = (info.get("sector", "").lower() in FINANCIAL_SECTORS
@@ -373,7 +369,7 @@ def run_resilience_screen(info_sleep_seconds: float = 0.3, universe: Optional[pd
         row.update(score_stock(row, row, f))
         row["verdict"] = classify(row)
 
-    rows.sort(key=lambda r: r["score"], reverse=True)
+    rows.sort(key=lambda r: (r["signals"], r["score"]), reverse=True)
     trend_counts = pd.Series([r["trend"] for r in rows]).value_counts().to_dict()
     return {
         "rows": rows,

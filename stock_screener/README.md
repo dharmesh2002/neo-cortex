@@ -69,16 +69,26 @@ Finds stocks that hold up while the market is weak *and* show delivery-backed ac
 the Nifty 500. Delivery quantity / delivery % come straight from NSE's daily bhavcopy archive
 (cached in `~/.cache/neo_cortex_nse`, only missing days are downloaded); prices from Yahoo Finance.
 
-| Filter | Strict rule |
-|---|---|
-| Resilience | Benchmark (Nifty 50) weak over 20 sessions or below its 50-day; stock beats it over 20 sessions, or is down < 2% |
-| Delivery (info only) | Not a filter and not scored. Shown as `deliv_ratio` (5-day avg delivery qty / 60-day avg) and `deliv_pct_chg_pts` (5-day minus 60-day avg delivery %, in points); `turnover_driven` flags surges that are just higher total volume |
-| Base / trend | 40-day range <= 12%, close within -3%..+5% of 50-day (watchlist -5%..+10%), 200-day flat or rising, <= 20% off 52-week high, not in a downtrend, >= Rs 5 Cr/day turnover |
-| Fundamentals + valuation | ROE > 15%, D/E < 100 (lenders exempt from debt/FCF), positive FCF, earnings or revenue growth, analyst not Sell, and >= 25% upside to the Graham value sqrt(22.5 x EPS x BVPS) |
+A stock is a **candidate** when it shows at least **3 of 7 price signals** (no single one is mandatory) and trades >= Rs 5 Cr/day:
 
-Verdicts: `Potential buy` (all four), `Priority watch` (technical + fundamentals), `Watch` (technical or
-watchlist band only). Every name also gets a 100-point score (price-only technicals: resilience 40, base/moving averages 35,
-fundamentals 12, valuation 8, liquidity/risk 5). The report reconciles against the earlier first-pass
+| Signal | Rule |
+|---|---|
+| `beats_nifty` | Beats Nifty 50 over 20 sessions, or is down < 2% |
+| `cushions_down_days` | Outperforms the index on >= 50% of Nifty's down days (last 40 sessions) |
+| `tight_base` | 40-day range <= 12% |
+| `near_50dma` | Close within -3%..+5% of the 50-day average |
+| `ma200_flat_up` | 200-day average flat or rising |
+| `near_high` | <= 20% off the 52-week high |
+| `not_downtrend` | Not classed as a downtrend |
+
+Delivery is **info only** -- not a filter, not scored. Shown as `deliv_ratio` (5-day avg delivery qty / 60-day avg) and
+`deliv_pct_chg_pts` (5-day minus 60-day avg delivery %, in points); `turnover_driven` flags surges that are just higher
+total volume. Fundamentals + valuation are checked for candidates: ROE > 15%, D/E < 100 (lenders exempt from debt/FCF),
+positive FCF, earnings or revenue growth, analyst not Sell, and >= 25% upside to the Graham value sqrt(22.5 x EPS x BVPS).
+
+Verdicts: `Potential buy` (candidate + fundamentals + valuation), `Priority watch` (candidate + fundamentals), `Candidate`
+(price signals only). Rows are ranked by signal count, then a price-only 100-point score (resilience 40, base/moving
+averages 35, fundamentals 12, valuation 8, liquidity/risk 5). The report reconciles against the earlier first-pass
 screen (delivery >= 1.15x, within 3% of 50-day or above, <= 20% off high) and lists the platform-trend counts.
 Graham value is a crude, conservative stand-in for intrinsic value. No backtest exists for this strategy.
 

@@ -1025,11 +1025,11 @@ def _build_market_breadth_markdown_report(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 RESILIENCE_COLS = [
-    "ticker", "company", "verdict", "score", "trend", "vs_50dma_pct", "vs_200dma_pct",
+    "ticker", "company", "verdict", "signals", "score", "trend", "vs_50dma_pct", "vs_200dma_pct",
     "off_high_pct", "range_40d_pct", "excess_20d_pct", "downside_capture", "deliv_ratio",
     "deliv_pct_5d", "deliv_pct_60d", "deliv_pct_chg_pts", "total_vol_ratio", "turnover_driven", "turnover_cr_20d",
     "roe_pct", "debt_to_equity", "pe", "intrinsic_value", "upside_pct", "legacy_pass",
-    "technical_failed",
+    "signals_passed", "technical_failed",
 ]
 
 
@@ -1057,7 +1057,7 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
     legacy = df[df["legacy_pass"]] if not df.empty else df
     strict = df[df["technical_pass"] == True] if "technical_pass" in df else df  # noqa: E712
     watch = df[df["verdict"].fillna("") != ""]
-    short = ["ticker", "verdict", "score", "trend", "vs_50dma_pct", "off_high_pct", "range_40d_pct",
+    short = ["ticker", "verdict", "signals", "score", "trend", "vs_50dma_pct", "off_high_pct", "range_40d_pct",
              "excess_20d_pct", "deliv_ratio", "deliv_pct_chg_pts", "upside_pct"]
 
     lines = [
@@ -1080,11 +1080,13 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
     lines += [
         f"| **Total** | **{result['evaluated']}** |",
         "",
-        "## Candidates (strict rules)",
+        "## Candidates (>= 3 of 7 price signals)",
         "",
-        f"`Potential buy` = technical entry test + fundamentals gate + >=25% upside to Graham value. "
-        f"`Priority watch` = technical + fundamentals, valuation not met. "
-        f"`Watch` = technical entry or watchlist band passed, fundamentals not met.",
+        f"A stock needs no single signal, just at least 3 of 7: beats_nifty, cushions_down_days, tight_base, "
+        f"near_50dma, ma200_flat_up, near_high, not_downtrend (and >= Rs 5 Cr/day traded). "
+        f"`Potential buy` = candidate + fundamentals gate + >=25% upside to Graham value. "
+        f"`Priority watch` = candidate + fundamentals, valuation not met. "
+        f"`Candidate` = price signals only, fundamentals not met.",
         "",
         _md_table(watch, short),
         "",
@@ -1092,8 +1094,7 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
         "",
         f"- First-pass rule (delivery >= 1.15x, within 3% of 50-day or above, <=20% off high, "
         f"delivery % not falling, >= Rs 5 Cr/day): **{len(legacy)}** names.",
-        f"- Strict entry test: **{int(df['technical_pass'].sum()) if not df.empty else 0}** names; "
-        f"watchlist band: **{int(df['watch_pass'].sum()) if not df.empty else 0}**.",
+        f"- Signal-count rule (>= 3 of 7 price signals): **{int(df['technical_pass'].sum()) if not df.empty else 0}** names.",
         "- The first-pass 'not historically expensive' check needs valuation history that public NSE/Yahoo "
         "data does not provide, so it is replaced here by the explicit 25%-upside gate; first-pass counts "
         "are therefore somewhat higher than the screenshot's.",
@@ -1106,11 +1107,10 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
         "",
         _md_table(df[df["ticker"].isin(SCREENSHOT_NAMES)].assign(
             ticker=lambda d: pd.Categorical(d["ticker"], SCREENSHOT_NAMES, ordered=True)).sort_values("ticker"),
-            ["ticker", "trend", "vs_50dma_pct", "off_high_pct", "range_40d_pct", "deliv_ratio",
-             "deliv_pct_chg_pts", "legacy_pass", "technical_failed", "score"]),
+            ["ticker", "signals", "trend", "vs_50dma_pct", "off_high_pct", "range_40d_pct", "deliv_ratio",
+             "deliv_pct_chg_pts", "legacy_pass", "signals_passed", "score"]),
         "",
-        "`technical_failed` lists the strict checks missed (resilient, base_range, near_50dma, "
-        "ma200_flat_up, off_high, not_downtrend, liquid).",
+        "`signals_passed` lists the price signals a stock shows; `technical_failed` the ones it misses.",
         "",
         "---",
         "Delivery is information only (not in the strict gate or score): `deliv_ratio` = 5-day average delivery quantity / 60-day average, `deliv_pct_chg_pts` = 5-day minus 60-day average delivery % in points. `turnover_driven` = delivery "
