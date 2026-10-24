@@ -1025,7 +1025,9 @@ def _build_market_breadth_markdown_report(result: dict) -> str:
     return "\n".join(lines) + "\n"
 
 RESILIENCE_COLS = [
-    "ticker", "company", "industry", "cap", "verdict", "signals", "score", "trend", "vs_50dma_pct", "vs_200dma_pct",
+    "ticker", "company", "industry", "cap", "verdict", "signals", "score", "trend",
+    "close", "day_pct", "volume", "vol_chg_pct", "vol_vs_20d_pct", "dma20", "dma50", "dma200",
+    "vs_20dma_pct", "vs_50dma_pct", "vs_200dma_pct",
     "off_high_pct", "range_40d_pct", "excess_20d_pct", "downside_capture", "deliv_ratio",
     "deliv_pct_5d", "deliv_pct_60d", "deliv_pct_chg_pts", "total_vol_ratio", "turnover_driven", "turnover_cr_20d",
     "roe_pct", "debt_to_equity", "pe", "intrinsic_value", "upside_pct", "legacy_pass",
@@ -1046,6 +1048,9 @@ def _format_resilience(rows: list) -> pd.DataFrame:
     return df
 
 
+TOP_COLS = ["rank", "ticker", "cap", "signals", "close", "day_pct", "volume", "vol_chg_pct",
+            "vol_vs_20d_pct", "dma20", "dma50", "dma200", "vs_20dma_pct", "vs_50dma_pct", "vs_200dma_pct",
+            "deliv_ratio", "deliv_pct_chg_pts"]
 CAP_PRIORITY = {"Large": 0, "Mid": 1, "Small": 2}
 
 
@@ -1100,9 +1105,7 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
         "",
         "## Top 20 (max 3 per sector; each sector filled large caps first, then mid)",
         "",
-        _md_table(top_per_sector(df), ["rank", "ticker", "industry", "cap", "verdict", "signals", "score", "trend",
-                                       "vs_50dma_pct", "excess_20d_pct", "deliv_ratio", "deliv_pct_chg_pts",
-                                       "upside_pct"]),
+        _md_table(top_per_sector(df), TOP_COLS),
         "",
         "## Candidates (>= 3 of 7 price signals)",
         "",
@@ -1243,7 +1246,7 @@ def main():
         picks = df[df["verdict"].fillna("") != ""] if not df.empty else df
         if not df.empty:
             print("\n=== TOP 20 (max 3 per sector) ===")
-            print(top_per_sector(df)[["rank", "ticker", "industry", "cap", "verdict", "signals", "score"]].to_string(index=False))
+            print(top_per_sector(df)[TOP_COLS].to_string(index=False))
         print(f"\n=== RESILIENCE + ACCUMULATION ({len(picks)}) ===")
         print(picks.to_string(index=False) if not picks.empty else "No candidates.")
 

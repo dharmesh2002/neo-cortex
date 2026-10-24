@@ -128,7 +128,11 @@ def evaluate_technicals(df: pd.DataFrame, bench_close: pd.Series) -> Optional[Di
     close = df["Close"]
     if len(close) < MIN_HISTORY_ROWS:
         return None
-    sma50, sma200 = close.rolling(50).mean(), close.rolling(200).mean()
+    sma20, sma50, sma200 = close.rolling(20).mean(), close.rolling(50).mean(), close.rolling(200).mean()
+    vol = df["Volume"].dropna() if "Volume" in df else pd.Series(dtype=float)
+    vol_today = float(vol.iloc[-1]) if len(vol) else float("nan")
+    vol_prev = float(vol.iloc[-2]) if len(vol) > 1 else float("nan")
+    vol_avg20 = float(vol.iloc[-21:-1].mean()) if len(vol) > 20 else float("nan")
     last40 = close.iloc[-40:]
     last20 = close.iloc[-20:]
     high_252 = df["High"].iloc[-252:].max() if "High" in df else close.iloc[-252:].max()
@@ -137,6 +141,14 @@ def evaluate_technicals(df: pd.DataFrame, bench_close: pd.Series) -> Optional[Di
 
     return {
         "close": float(close.iloc[-1]),
+        "day_pct": float((close.iloc[-1] / close.iloc[-2] - 1) * 100),
+        "dma20": float(sma20.iloc[-1]),
+        "dma50": float(sma50.iloc[-1]),
+        "dma200": float(sma200.iloc[-1]),
+        "vs_20dma_pct": float((close.iloc[-1] / sma20.iloc[-1] - 1) * 100),
+        "volume": vol_today,
+        "vol_chg_pct": (vol_today / vol_prev - 1) * 100 if vol_prev else float("nan"),
+        "vol_vs_20d_pct": (vol_today / vol_avg20 - 1) * 100 if vol_avg20 else float("nan"),
         "trend": classify_trend(close),
         "vs_50dma_pct": float((close.iloc[-1] / sma50.iloc[-1] - 1) * 100),
         "vs_200dma_pct": float((close.iloc[-1] / sma200.iloc[-1] - 1) * 100),
