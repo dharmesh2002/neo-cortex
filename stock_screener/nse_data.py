@@ -14,6 +14,7 @@ only missing days are ever downloaded.
 import io
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from typing import Dict, List, Optional
@@ -24,9 +25,16 @@ import requests
 logger = logging.getLogger(__name__)
 
 BHAVCOPY_URL = "https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{ddmmyyyy}.csv"
-NIFTY100_URL = "https://niftyindices.com/IndexConstituent/ind_nifty100list.csv"
-NIFTYMIDCAP150_URL = "https://niftyindices.com/IndexConstituent/ind_niftymidcap150list.csv"
-NIFTY500_URL = "https://niftyindices.com/IndexConstituent/ind_nifty500list.csv"
+# Each list is tried on niftyindices.com first, then on NSE's own archive
+# (same files; niftyindices.com goes down for maintenance from time to time).
+def _index_urls(filename: str) -> list:
+    return [f"https://niftyindices.com/IndexConstituent/{filename}",
+            f"https://nsearchives.nseindia.com/content/indices/{filename}"]
+
+
+NIFTY100_URL = _index_urls("ind_nifty100list.csv")
+NIFTYMIDCAP150_URL = _index_urls("ind_niftymidcap150list.csv")
+NIFTY500_URL = _index_urls("ind_nifty500list.csv")
 DEFAULT_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "neo_cortex_nse")
 
 _HEADERS = {
@@ -115,17 +123,26 @@ def delivery_series_by_symbol(history: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     return {sym: g.sort_values("Date").set_index("Date") for sym, g in history.groupby("SYMBOL")}
 
 
-def _fetch_index_csv(url: str, timeout: int = 45) -> pd.DataFrame:
-    resp = requests.get(url, headers={**_HEADERS, "Referer": "https://niftyindices.com/"},
-                        timeout=timeout)
-    resp.raise_for_status()
-    if resp.text.lstrip().lower().startswith(("<!doctype", "<html")):
-        raise ValueError(f"niftyindices.com returned an HTML block page instead of a CSV ({url})")
-    df = pd.read_csv(io.StringIO(resp.text))
-    df.columns = [c.strip() for c in df.columns]
-    df = df.dropna(subset=["Symbol"])
-    df["Symbol"] = df["Symbol"].str.strip()
-    return df
+def _fetch_index_csv(urls: list, timeout: int = 45, retries: int = 2) -> pd.DataFrame:
+    last_err = None
+    for url in urls:
+        for attempt in range(retries):
+            try:
+                resp = requests.get(url, headers={**_HEADERS, "Referer": "https://niftyindices.com/"},
+                                    timeout=timeout)
+                resp.raise_for_status()
+                if resp.text.lstrip().lower().startswith(("<!doctype", "<html")):
+                    raise ValueError(f"HTML page instead of a CSV ({url})")
+                df = pd.read_csv(io.StringIO(resp.text))
+                df.columns = [c.strip() for c in df.columns]
+                df = df.dropna(subset=["Symbol"])
+                df["Symbol"] = df["Symbol"].str.strip()
+                return df
+            except (requests.RequestException, ValueError) as exc:
+                last_err = exc
+                logger.warning("Index list %s failed (%s)", url, exc)
+                time.sleep(2 * (attempt + 1))
+    raise RuntimeError(f"Could not fetch index list from {urls}: {last_err}")
 
 
 def fetch_cap_tiers(timeout: int = 45) -> Dict[str, str]:

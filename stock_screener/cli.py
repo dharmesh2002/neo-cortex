@@ -1031,7 +1031,8 @@ RESILIENCE_COLS = [
     "close", "day_pct", "volume", "vol_chg_pct", "vol_vs_20d_pct", "dma20", "dma50", "dma200",
     "vs_20dma_pct", "vs_50dma_pct", "vs_200dma_pct",
     "off_high_pct", "range_40d_pct", "excess_20d_pct", "downside_capture", "deliv_ratio",
-    "deliv_pct_5d", "deliv_pct_60d", "deliv_pct_chg_pts", "total_vol_ratio", "turnover_driven", "turnover_cr_20d",
+    "deliv_pct_5d", "deliv_pct_60d", "deliv_pct_chg_pts", "flow", "buy_pct_today", "cmf20",
+    "up_down_vol_20d", "deliv_up_down_20d", "total_vol_ratio", "turnover_driven", "turnover_cr_20d",
     "roe_pct", "debt_to_equity", "pe", "intrinsic_value", "upside_pct", "legacy_pass",
     "signals_passed", "technical_failed",
 ]
@@ -1053,6 +1054,8 @@ def _format_resilience(rows: list) -> pd.DataFrame:
 TOP_COLS = ["rank", "ticker", "cap", "score", "signals", "close", "day_pct", "volume", "vol_chg_pct",
             "vol_vs_20d_pct", "dma20", "dma50", "dma200", "vs_20dma_pct", "vs_50dma_pct", "vs_200dma_pct",
             "deliv_ratio", "deliv_pct_chg_pts"]
+FLOW_COLS = ["rank", "ticker", "day_pct", "buy_pct_today", "cmf20", "up_down_vol_20d",
+             "deliv_up_down_20d", "flow"]
 CAP_PRIORITY = {"Large": 0, "Mid": 1, "Small": 2}
 
 
@@ -1091,7 +1094,7 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
         "",
         f"**Market context ({ctx['as_of']}):** Nifty 50 {ctx['close']:.0f}, trend **{ctx['trend']}**, "
         f"{ctx['ret_20d_pct']:+.1f}% over 20 sessions, {ctx['vs_50dma_pct']:+.1f}% vs its 50-day average. "
-        f"Market weak: **{'yes' if ctx['weak'] else 'no'}**. Delivery data through {result['delivery_asof']} (NSE bhavcopy).",
+        f"Market weak: **{'yes' if ctx['weak'] else 'no'}**. Prices through {result['price_asof']}; delivery data through {result['delivery_asof']} (NSE bhavcopy).",
         "",
         f"Universe: Nifty 500 ({result['universe_size']} symbols); {result['evaluated']} evaluated, "
         f"{result['skipped']['no_prices']} skipped for missing/short price history, "
@@ -1109,6 +1112,15 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
         "## Top 20 (max 3 per sector; each sector filled large caps first, then mid)",
         "",
         _md_table(top_per_sector(df), TOP_COLS),
+        "",
+        "## Buying vs selling pressure (Top 20)",
+        "",
+        _md_table(top_per_sector(df), FLOW_COLS),
+        "",
+        "Estimated from daily bars, not tick data: `buy_pct_today` = where the close sits in the day's range; "
+        "`cmf20` = Chaikin Money Flow, -1 selling to +1 buying; `up_down_vol_20d` = volume on up days / down days; "
+        "`deliv_up_down_20d` = delivery quantity on up days / down days. `flow`: Buying = cmf20 > 0.05 and up/down > 1.1, "
+        "Selling = cmf20 < -0.05 and up/down < 0.9.",
         "",
         "## Candidates (>= 3 of 7 price signals)",
         "",

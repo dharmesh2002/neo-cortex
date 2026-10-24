@@ -114,13 +114,57 @@ def delivery_metrics(d: pd.DataFrame) -> Optional[Dict]:
     if not base_qty:
         return None
     base_total = last60["TTL_TRD_QNTY"].mean()
+    # Delivery quantity on up-close vs down-close days over the last 20 sessions.
+    px = d["CLOSE_PRICE"]
+    chg = px.diff()
+    last20 = d.iloc[-20:]
+    up_q = last20.loc[chg.loc[last20.index] > 0, "DELIV_QTY"].sum()
+    down_q = last20.loc[chg.loc[last20.index] < 0, "DELIV_QTY"].sum()
     return {
+        "deliv_up_down_20d": float(up_q / down_q) if down_q else float("nan"),
         "deliv_ratio": float(last5["DELIV_QTY"].mean() / base_qty),
         "deliv_pct_5d": float(last5["DELIV_PER"].mean()),
         "deliv_pct_60d": float(last60["DELIV_PER"].mean()),
         "total_vol_ratio": float(last5["TTL_TRD_QNTY"].mean() / base_total) if base_total else float("nan"),
         "turnover_cr_20d": float(d.iloc[-20:]["TURNOVER_LACS"].mean() / 100),  # lakh -> crore
     }
+
+
+def _volume_flow(df: pd.DataFrame) -> Dict:
+    """Buying-vs-selling pressure estimated from daily bars. True buyer/seller
+    initiated volume needs tick data; these are the standard daily proxies:
+
+    * buy_pct_today  -- share of today's volume attributed to buyers by where
+      the close sits in the day's range (close at high = 100%, at low = 0%).
+    * cmf20          -- Chaikin Money Flow, the volume-weighted version of that
+      over 20 sessions (-1 selling .. +1 buying).
+    * up_down_vol_20d -- volume on up-close days / volume on down-close days.
+    """
+    d = df.dropna(subset=["Close", "High", "Low", "Volume"])
+    out = {"buy_pct_today": float("nan"), "cmf20": float("nan"), "up_down_vol_20d": float("nan")}
+    if len(d) < 22:
+        return out
+    rng = (d["High"] - d["Low"]).replace(0, np.nan)
+    clv = ((d["Close"] - d["Low"]) - (d["High"] - d["Close"])) / rng
+    last = d.iloc[-20:]
+    vol20 = last["Volume"].sum()
+    if vol20:
+        out["cmf20"] = float((clv.iloc[-20:].fillna(0) * last["Volume"]).sum() / vol20)
+    out["buy_pct_today"] = float((d["Close"].iloc[-1] - d["Low"].iloc[-1]) / rng.iloc[-1] * 100) if pd.notna(rng.iloc[-1]) else float("nan")
+    chg = d["Close"].diff().iloc[-20:]
+    up, down = last.loc[chg > 0, "Volume"].sum(), last.loc[chg < 0, "Volume"].sum()
+    out["up_down_vol_20d"] = float(up / down) if down else float("nan")
+    return out
+
+
+def flow_label(cmf20: float, up_down: float) -> str:
+    if pd.isna(cmf20) or pd.isna(up_down):
+        return ""
+    if cmf20 > 0.05 and up_down > 1.1:
+        return "Buying"
+    if cmf20 < -0.05 and up_down < 0.9:
+        return "Selling"
+    return "Mixed"
 
 
 def evaluate_technicals(df: pd.DataFrame, bench_close: pd.Series) -> Optional[Dict]:
@@ -133,6 +177,7 @@ def evaluate_technicals(df: pd.DataFrame, bench_close: pd.Series) -> Optional[Di
     vol_today = float(vol.iloc[-1]) if len(vol) else float("nan")
     vol_prev = float(vol.iloc[-2]) if len(vol) > 1 else float("nan")
     vol_avg20 = float(vol.iloc[-21:-1].mean()) if len(vol) > 20 else float("nan")
+    flow = _volume_flow(df)
     last40 = close.iloc[-40:]
     last20 = close.iloc[-20:]
     high_252 = df["High"].iloc[-252:].max() if "High" in df else close.iloc[-252:].max()
@@ -146,6 +191,7 @@ def evaluate_technicals(df: pd.DataFrame, bench_close: pd.Series) -> Optional[Di
         "dma50": float(sma50.iloc[-1]),
         "dma200": float(sma200.iloc[-1]),
         "vs_20dma_pct": float((close.iloc[-1] / sma20.iloc[-1] - 1) * 100),
+        **flow,
         "volume": vol_today,
         "vol_chg_pct": (vol_today / vol_prev - 1) * 100 if vol_prev else float("nan"),
         "vol_vs_20d_pct": (vol_today / vol_avg20 - 1) * 100 if vol_avg20 else float("nan"),
@@ -342,11 +388,24 @@ def run_resilience_screen(info_sleep_seconds: float = 0.3, universe: Optional[pd
     bench_df = yf.download(BENCHMARK, period=PRICE_PERIOD, interval="1d", auto_adjust=False, progress=False)
     if isinstance(bench_df.columns, pd.MultiIndex):
         bench_df.columns = bench_df.columns.get_level_values(0)
-    ctx = market_context(bench_df)
-    bench_close = bench_df["Close"].dropna()
 
     data = yf.download(tickers, period=PRICE_PERIOD, interval="1d", group_by="ticker",
                        auto_adjust=False, threads=True, progress=False)
+
+    # Yahoo sometimes publishes the index a session before the stocks. Measuring
+    # stocks against a newer benchmark bar would misstate every relative-strength
+    # figure, so cut everything back to the last date most stocks actually have.
+    last_dates = pd.Series({t: data[t].dropna(how="all").index.max() for t in tickers
+                            if t in data.columns.get_level_values(0)})
+    as_of = last_dates.mode().iloc[0]
+    if bench_df.index.max() != as_of:
+        logger.warning("Benchmark last bar %s != stock last bar %s; aligning both to %s",
+                       bench_df.index.max().date(), as_of.date(), min(as_of, bench_df.index.max()).date())
+    as_of = min(as_of, bench_df.index.max())
+    bench_df = bench_df[bench_df.index <= as_of]
+    data = data[data.index <= as_of]
+    ctx = market_context(bench_df)
+    bench_close = bench_df["Close"].dropna()
 
     rows: List[Dict] = []
     skipped = {"no_prices": 0, "no_delivery": 0}
@@ -356,7 +415,7 @@ def run_resilience_screen(info_sleep_seconds: float = 0.3, universe: Optional[pd
         except KeyError:
             skipped["no_prices"] += 1
             continue
-        t = evaluate_technicals(px, bench_close)
+        t = evaluate_technicals(px, bench_close) if (len(px) and px.index.max() == as_of) else None
         if t is None:
             skipped["no_prices"] += 1
             continue
@@ -364,7 +423,7 @@ def run_resilience_screen(info_sleep_seconds: float = 0.3, universe: Optional[pd
         if dlv is None:
             skipped["no_delivery"] += 1
             continue
-        row = {"ticker": sym, "company": company.get(sym, sym), "industry": industry.get(sym, ""),
+        row = {"ticker": sym, "flow": flow_label(t["cmf20"], t["up_down_vol_20d"]), "company": company.get(sym, sym), "industry": industry.get(sym, ""),
                "cap": cap_tier.get(sym, "Small"),
                **t, **dlv, **legacy_screen(t, dlv), **strict_screen(t, dlv, ctx["weak"])}
         rows.append(row)
@@ -389,6 +448,7 @@ def run_resilience_screen(info_sleep_seconds: float = 0.3, universe: Optional[pd
         "rows": rows,
         "context": ctx,
         "delivery_asof": delivery_asof,
+        "price_asof": as_of.date().isoformat(),
         "universe_size": len(symbols),
         "evaluated": len(rows),
         "skipped": skipped,
