@@ -1109,7 +1109,7 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
             ["ticker", "trend", "vs_50dma_pct", "off_high_pct", "range_40d_pct", "deliv_ratio",
              "deliv_pct_5d", "deliv_pct_60d", "legacy_pass", "technical_failed", "score"]),
         "",
-        "`technical_failed` lists the strict checks missed (resilient, delivery_qty, delivery_pct, base_range, near_50dma, "
+        "`technical_failed` lists the strict checks missed (resilient, delivery_qty (floor 1.0x), delivery_pct, base_range, near_50dma, "
         "ma200_flat_up, off_high, not_downtrend, liquid).",
         "",
         "---",
@@ -1117,8 +1117,8 @@ def _build_resilience_markdown_report(result: dict, df: pd.DataFrame) -> str:
         "quantity is rising no faster than total traded quantity (surge may be turnover, not holding). "
         "Intrinsic value is the Graham number sqrt(22.5 x EPS x book value) -- a deliberately crude, "
         "conservative proxy; replace it with your own estimate before acting. Fundamentals are fetched only "
-        "for names that clear the technical bands. Score (100): resilience 25, delivery 20, base 20, "
-        "fundamentals 15, valuation 10, liquidity/risk 10 (fundamental/valuation points are 0 until fetched). "
+        "for names that clear the technical bands. Score (100, price-led): resilience 35, base/moving averages 30, "
+        "delivery 10, fundamentals 12, valuation 8, liquidity/risk 5 (fundamental/valuation points are 0 until fetched). "
         "No backtest exists for this strategy. Not investment advice.",
     ]
     return "\n".join(lines) + "\n"

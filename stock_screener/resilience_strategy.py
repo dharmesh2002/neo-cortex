@@ -38,8 +38,12 @@ MIN_HISTORY_ROWS = 220  # 200-day average plus its 20-day slope lookback
 BENCHMARK = "^NSEI"
 
 # --- Proposed (strict) rules -------------------------------------------------
-DELIVERY_RATIO_MIN = 1.25
+# Delivery is supporting evidence, not the driver: a light floor (volume isn't
+# drying up) gates entry; 1.25x / 1.5x only earn score points and a flag.
+DELIVERY_RATIO_MIN = 1.0
+DELIVERY_RATIO_CONFIRM = 1.25
 DELIVERY_RATIO_STRONG = 1.5
+DELIVERY_PCT_MAX_DROP = 3.0
 RANGE_40D_MAX_PCT = 12.0
 DMA50_ENTRY_BAND = (-3.0, 5.0)       # % vs 50-day for an entry-test pass
 DMA50_WATCH_BAND = (-5.0, 10.0)      # % vs 50-day for the watchlist
@@ -191,7 +195,7 @@ def strict_screen(t: Dict, dlv: Dict, market_weak: bool) -> Dict:
     wlo, whi = DMA50_WATCH_BAND
     holds_up = t["excess_20d_pct"] >= 0 or t["ret_20d_pct"] >= -2.0
     delivery_qty_ok = dlv["deliv_ratio"] >= DELIVERY_RATIO_MIN
-    delivery_pct_ok = dlv["deliv_pct_5d"] >= dlv["deliv_pct_60d"] - 1.0
+    delivery_pct_ok = dlv["deliv_pct_5d"] >= dlv["deliv_pct_60d"] - DELIVERY_PCT_MAX_DROP
     delivery_real = delivery_qty_ok and delivery_pct_ok
     # Delivery quantity rising no faster than total volume means the surge may
     # just be more turnover, not more holding -- flagged and scored, not a hard fail.
@@ -223,6 +227,7 @@ def strict_screen(t: Dict, dlv: Dict, market_weak: bool) -> Dict:
         "watch_pass": watch_pass,
         "technical_failed": ", ".join(k for k, v in entry_checks.items() if not v),
         "turnover_driven": turnover_driven,
+        "delivery_confirmed": bool(delivery_real and dlv["deliv_ratio"] >= DELIVERY_RATIO_CONFIRM),
         "delivery_strong": bool(delivery_real and dlv["deliv_ratio"] >= DELIVERY_RATIO_STRONG),
         "market_weak": market_weak,
     }
@@ -277,32 +282,33 @@ def _scale(x: float, lo: float, hi: float, pts: float) -> float:
 
 
 def score_stock(t: Dict, dlv: Dict, f: Optional[Dict]) -> Dict:
-    # Relative strength and market resilience: 25
+    # Price-led score. Resilience vs the market: 35
     rs = _scale(t["excess_20d_pct"], -2, 8, 15)
+    rs += _scale(t["excess_10d_pct"], -2, 5, 7)
     capture = t["downside_capture"]
-    rs += _scale(capture if capture is not None else 0.4, 0.4, 0.8, 10)
+    rs += _scale(capture if capture is not None else 0.4, 0.4, 0.8, 13)
 
-    # Delivery accumulation confirmation: 20
-    dv = _scale(dlv["deliv_ratio"], 1.0, 1.5, 12)
-    dv += _scale(dlv["deliv_pct_5d"] - dlv["deliv_pct_60d"], -2, 6, 4)
+    # Base quality and moving averages: 30
+    base = _scale(RANGE_40D_MAX_PCT * 2 - t["range_40d_pct"], 0, RANGE_40D_MAX_PCT * 2 - 8, 10)
+    base += _scale(6 - abs(t["vs_50dma_pct"] + 0.5), 0, 6, 10)
+    base += _scale(t["dma200_slope_pct"], -2, 1, 6)
+    base += _scale(OFF_HIGH_MAX_PCT * 1.5 - t["off_high_pct"], 0, OFF_HIGH_MAX_PCT * 1.5 - 5, 4)
+
+    # Delivery as supporting evidence only: 10
+    dv = _scale(dlv["deliv_ratio"], 1.0, 1.5, 6)
+    dv += _scale(dlv["deliv_pct_5d"] - dlv["deliv_pct_60d"], -3, 4, 2)
     if not math.isnan(dlv["total_vol_ratio"]):
-        dv += _scale(dlv["deliv_ratio"] - dlv["total_vol_ratio"], 0, 0.3, 4)
+        dv += _scale(dlv["deliv_ratio"] - dlv["total_vol_ratio"], 0, 0.3, 2)
 
-    # Base quality and moving averages: 20
-    base = _scale(RANGE_40D_MAX_PCT * 2 - t["range_40d_pct"], 0, RANGE_40D_MAX_PCT * 2 - 8, 8)
-    base += _scale(6 - abs(t["vs_50dma_pct"] + 0.5), 0, 6, 6)
-    base += _scale(t["dma200_slope_pct"], -2, 1, 4)
-    base += _scale(OFF_HIGH_MAX_PCT * 1.5 - t["off_high_pct"], 0, OFF_HIGH_MAX_PCT * 1.5 - 5, 2)
-
-    # Fundamental quality: 15 / valuation: 10 (only known once fundamentals were fetched)
+    # Fundamental quality: 12 / valuation: 8 (only known once fundamentals were fetched)
     fund = val = 0.0
     if f:
-        fund = 4 * f["roe_ok"] + 4 * f["debt_ok"] + 3 * f["fcf_ok"] + 4 * f["earnings_outlook_ok"]
-        val = _scale(f["upside_pct"], 0, MIN_UPSIDE_PCT, 10) if f["upside_pct"] is not None else 0.0
+        fund = 3 * f["roe_ok"] + 3 * f["debt_ok"] + 3 * f["fcf_ok"] + 3 * f["earnings_outlook_ok"]
+        val = _scale(f["upside_pct"], 0, MIN_UPSIDE_PCT, 8) if f["upside_pct"] is not None else 0.0
 
-    # Liquidity and risk controls: 10
-    liq = _scale(dlv["turnover_cr_20d"], MIN_TURNOVER_CR, STRONG_TURNOVER_CR, 5)
-    liq += _scale(3.0 - t["daily_vol_pct"], 0, 1.5, 5)
+    # Liquidity and risk controls: 5
+    liq = _scale(dlv["turnover_cr_20d"], MIN_TURNOVER_CR, STRONG_TURNOVER_CR, 2)
+    liq += _scale(3.0 - t["daily_vol_pct"], 0, 1.5, 3)
 
     parts = {"s_resilience": rs, "s_delivery": dv, "s_base": base,
              "s_fundamental": fund, "s_valuation": val, "s_liquidity": liq}
